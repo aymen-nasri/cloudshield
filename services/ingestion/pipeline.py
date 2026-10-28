@@ -25,7 +25,7 @@ class EventStore(Protocol):
 
 
 class InMemoryEventStore:
-    """Dev/test store. PostgreSQL (services/cases/migrations) replaces it from M2."""
+    """Dev/test store. storage.postgres.PostgresEventStore is the persistent implementation."""
 
     def __init__(self) -> None:
         self._by_key: dict[str, NormalizedEvent] = {}
@@ -61,11 +61,13 @@ class IngestPipeline:
         evidence: EvidenceStore,
         on_accepted: Callable[[NormalizedEvent], None] | None = None,
         clock: Callable[[], datetime] = utcnow,
+        enrich: Callable[[NormalizedEvent], NormalizedEvent] | None = None,
     ) -> None:
         self.events = events
         self.evidence = evidence
         self.on_accepted = on_accepted
         self.clock = clock
+        self.enrich = enrich
 
     def ingest(self, raw: bytes, adapter: SourceAdapter) -> IngestResult:
         payload = adapter.parse(raw)
@@ -78,6 +80,9 @@ class IngestPipeline:
         event = adapter.to_event(
             payload, event_id=new_id("evt"), ingest_time=now, raw_uri=uri, checksum=checksum
         )
+        if self.enrich:
+            # Before insert, so the stored event and correlation both see resolved identity and keys.
+            event = self.enrich(event)
         try:
             self.events.insert(event, key)
         except DuplicateEventError:

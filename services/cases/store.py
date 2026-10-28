@@ -14,7 +14,7 @@ class CaseStore(Protocol):
 
 
 class InMemoryCaseStore:
-    """Dev/test store. TODO(M2): PostgreSQL implementation backed by migrations/001_init.sql."""
+    """Dev/test store. storage.postgres.PostgresCaseStore is the persistent implementation."""
 
     def __init__(self) -> None:
         self._cases: dict[str, Case] = {}
