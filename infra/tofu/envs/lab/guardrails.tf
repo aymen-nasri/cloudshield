@@ -82,6 +82,7 @@ data "aws_iam_policy_document" "ci_publish" {
       "ecr:PutImage",
       "ecr:BatchGetImage",
     ]
+
     resources = [aws_ecr_repository.core.arn]
   }
 }

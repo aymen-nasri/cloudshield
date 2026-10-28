@@ -1,0 +1,12 @@
+# An allow-policy that forgets the quarantine exclusion: a labelled pod would keep its egress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: leaky-allow
+  namespace: shop
+spec:
+  podSelector:
+    matchLabels: { app: checkout }
+  policyTypes: [Egress]
+  egress:
+    - {}
