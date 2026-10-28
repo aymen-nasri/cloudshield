@@ -4,11 +4,15 @@ Each lookup is read-only and timestamped. Anything that cannot be resolved is re
 and shown as unresolved, never guessed.
 """
 
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from common.timeutil import utcnow
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -64,6 +68,16 @@ def instance_for_node(ec2: Any, node_name: str) -> str | None:
     return None
 
 
+def _optional(lookup: Callable[[], str | None], what: str) -> str | None:
+    """AWS context is a bonus: if it can't be read (no AWS in the kind lab, throttling), leave it
+    unresolved rather than losing the Kubernetes context too."""
+    try:
+        return lookup()
+    except Exception:
+        log.warning("could not resolve %s; leaving it unresolved", what, exc_info=True)
+        return None
+
+
 def resolve_pod_context(
     *, core: Any, apps: Any, eks: Any, ec2: Any, cluster: str, namespace: str, pod_name: str
 ) -> PodContext:
@@ -71,6 +85,12 @@ def resolve_pod_context(
     owner_kind, owner_name = owner_chain(core, apps, namespace, pod)
     service_account = pod.spec.service_account_name
     node = pod.spec.node_name
+    role = (
+        _optional(lambda: pod_identity_role(eks, cluster, namespace, service_account), "IAM role")
+        if service_account
+        else None
+    )
+    instance = _optional(lambda: instance_for_node(ec2, node), "EC2 instance") if node else None
     return PodContext(
         namespace=namespace,
         pod=pod_name,
@@ -80,7 +100,7 @@ def resolve_pod_context(
         owner_kind=owner_kind,
         owner_name=owner_name,
         labels=dict(pod.metadata.labels or {}),
-        iam_role_arn=pod_identity_role(eks, cluster, namespace, service_account) if service_account else None,
-        instance_id=instance_for_node(ec2, node) if node else None,
+        iam_role_arn=role,
+        instance_id=instance,
         resolved_at=utcnow(),
     )

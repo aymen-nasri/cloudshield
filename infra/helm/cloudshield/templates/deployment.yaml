@@ -23,6 +23,7 @@ spec:
           env:
             - { name: CLOUDSHIELD_CLUSTER, value: {{ .Values.cluster | quote }} }
             - { name: CLOUDSHIELD_ACCOUNT_ID, value: {{ .Values.accountId | quote }} }
+            - { name: CLOUDSHIELD_ENRICHMENT, value: {{ .Values.enrichment | quote }} }
           envFrom:
             - secretRef: { name: {{ .Values.credentialsSecret }} }
           readinessProbe:

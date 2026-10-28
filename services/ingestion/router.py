@@ -1,6 +1,7 @@
 """HTTP ingestion endpoints."""
 
 from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.concurrency import run_in_threadpool
 
 from ingestion.adapters import MAX_PAYLOAD_BYTES, PayloadError, SourceAdapter
 from ingestion.auth import SourceCredential, authenticate
@@ -29,7 +30,8 @@ def build_router(
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "producer not authenticated")
 
         try:
-            result = pipeline.ingest(body, adapter)
+            # Storage and enrichment calls block; keep them off the event loop.
+            result = await run_in_threadpool(pipeline.ingest, body, adapter)
         except PayloadError as exc:
             raise HTTPException(422, str(exc)) from exc
 

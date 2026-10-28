@@ -8,8 +8,8 @@ import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from datetime import datetime
-from typing import Any, Literal
+from datetime import UTC, datetime
+from typing import Any, Literal, Protocol
 
 from common.timeutil import utcnow
 
@@ -42,6 +42,43 @@ def _digest(
     return "sha256:" + hashlib.sha256(body.encode()).hexdigest()
 
 
+class AuditStore(Protocol):
+    def append(
+        self, actor_type: ActorType, actor_id: str, action: str, details: dict[str, Any]
+    ) -> AuditRecord: ...
+
+    def records(self, case_id: str | None = None) -> list[AuditRecord]: ...
+
+    def verify(self) -> int | None: ...
+
+
+def make_record(
+    seq: int,
+    at: datetime,
+    actor_type: ActorType,
+    actor_id: str,
+    action: str,
+    details: dict[str, Any],
+    prev_hash: str,
+) -> AuditRecord:
+    ts = format_ts(at)
+    return AuditRecord(
+        seq=seq,
+        ts=ts,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        action=action,
+        details=details,
+        prev_hash=prev_hash,
+        hash=_digest(seq, ts, actor_type, actor_id, action, details, prev_hash),
+    )
+
+
+def format_ts(at: datetime) -> str:
+    """Canonical timestamp text: UTC, microseconds. Stores must round-trip this exactly."""
+    return at.astimezone(UTC).isoformat(timespec="microseconds")
+
+
 class AuditLog:
     def __init__(self, clock: Callable[[], datetime] = utcnow) -> None:
         self._records: list[AuditRecord] = []
@@ -50,18 +87,9 @@ class AuditLog:
     def append(
         self, actor_type: ActorType, actor_id: str, action: str, details: dict[str, Any]
     ) -> AuditRecord:
-        seq = len(self._records) + 1
         prev = self._records[-1].hash if self._records else GENESIS_HASH
-        ts = self.clock().isoformat()
-        record = AuditRecord(
-            seq=seq,
-            ts=ts,
-            actor_type=actor_type,
-            actor_id=actor_id,
-            action=action,
-            details=details,
-            prev_hash=prev,
-            hash=_digest(seq, ts, actor_type, actor_id, action, details, prev),
+        record = make_record(
+            len(self._records) + 1, self.clock(), actor_type, actor_id, action, details, prev
         )
         self._records.append(record)
         return record

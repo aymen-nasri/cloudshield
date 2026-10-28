@@ -8,9 +8,13 @@ replicaCount: 1
 cluster: cs-lab-eks
 accountId: ""
 
-# Existing Secret holding CLOUDSHIELD_FALCO_TOKEN and CLOUDSHIELD_WAZUH_HMAC_SECRET.
-# Created from AWS Secrets Manager by the External Secrets Operator in the AWS lab.
+# Existing Secret holding CLOUDSHIELD_FALCO_TOKEN, CLOUDSHIELD_WAZUH_HMAC_SECRET and
+# CLOUDSHIELD_DATABASE_URL. Created from AWS Secrets Manager by the External Secrets Operator.
 credentialsSecret: cloudshield-ingest-credentials
+
+# "k8s" resolves pod -> deployment -> service account -> IAM role -> instance for each event,
+# using the read-only cloudshield-investigator identity. Empty disables enrichment.
+enrichment: k8s
 
 serviceAccountName: cloudshield-investigator
 

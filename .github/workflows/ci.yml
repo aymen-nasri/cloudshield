@@ -12,13 +12,27 @@ jobs:
   test:
     name: lint, typecheck, test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cloudshield_test
+          POSTGRES_USER: cloudshield
+          POSTGRES_HOST_AUTH_METHOD: trust # throwaway CI database, reachable only from this job
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U cloudshield"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CLOUDSHIELD_TEST_DATABASE_URL: postgresql://cloudshield@localhost:5432/cloudshield_test
+      CLOUDSHIELD_REQUIRE_POSTGRES_TESTS: "1" # fail, don't skip, if the database is missing
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[dev,postgres]"
       - run: ruff check .
       - run: ruff format --check .
       - run: mypy services
