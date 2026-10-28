@@ -1,0 +1,24 @@
+# kyverno test infra/policies/kyverno/tests
+# Proves the quarantine mechanism's guard: the repository's own NetworkPolicy baseline passes,
+# and an allow-policy that forgets the exclusion is reported.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: require-quarantine-exclusion
+policies:
+  - ../../require-quarantine-exclusion.yaml
+resources:
+  - ../../../networkpolicies/shop.yaml
+  - leaky-allow.yaml
+variables: values.yaml
+results:
+  - policy: require-quarantine-exclusion
+    rule: allow-policies-exclude-quarantined-pods
+    kind: NetworkPolicy
+    resources: [allow-dns, checkout-allow, cart-allow]
+    result: pass
+  - policy: require-quarantine-exclusion
+    rule: allow-policies-exclude-quarantined-pods
+    kind: NetworkPolicy
+    resources: [leaky-allow]
+    result: fail
