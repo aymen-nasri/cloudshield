@@ -13,6 +13,7 @@ from cases.audit import AuditLog, AuditStore
 from cases.router import build_router as build_cases_router
 from cases.store import CaseStore, InMemoryCaseStore
 from common.models import NormalizedEvent
+from core.auth import AnalystDirectory
 from correlation.engine import CorrelationEngine
 from enrichment.context import PodContext
 from enrichment.enricher import Enricher, kubernetes_pod_resolver
@@ -23,6 +24,11 @@ from ingestion.coverage import CoverageTracker
 from ingestion.evidence import EvidenceStore, InMemoryEvidenceStore, LocalEvidenceStore
 from ingestion.pipeline import EventStore, IngestPipeline, InMemoryEventStore
 from ingestion.router import build_router as build_ingestion_router
+from policy.engine import load_policies
+from responder.executor import Executor, KubernetesExecutor
+from response.records import InMemoryProposalStore, ProposalStore
+from response.router import build_router as build_response_router
+from response.service import ResponseService
 
 
 @dataclass
@@ -36,6 +42,11 @@ class Settings:
     database_schema: str | None = None
     # "k8s" resolves pod context from the Kubernetes API and AWS. Unset means no enrichment.
     enrichment: str | None = None
+    # "k8s" runs approved actions in-process with the responder identity (lab). Unset: none.
+    executor: str | None = None
+    # Which policy environment this deployment is ("lab" or "prod"); the allowlist is per environment.
+    environment: str = "lab"
+    analysts: AnalystDirectory = field(default_factory=lambda: AnalystDirectory({}))
     credentials: dict[str, SourceCredential] = field(default_factory=dict)
     max_silence: dict[str, timedelta] = field(
         default_factory=lambda: {"falco": timedelta(minutes=5), "guardduty": timedelta(hours=6)}
@@ -59,6 +70,9 @@ class Settings:
             evidence_dir=Path(evidence_dir) if evidence_dir else None,
             database_url=os.getenv("CLOUDSHIELD_DATABASE_URL"),
             enrichment=os.getenv("CLOUDSHIELD_ENRICHMENT"),
+            executor=os.getenv("CLOUDSHIELD_EXECUTOR"),
+            environment=os.getenv("CLOUDSHIELD_ENVIRONMENT", "lab"),
+            analysts=AnalystDirectory.from_json(os.getenv("CLOUDSHIELD_ANALYSTS")),
             credentials=credentials,
         )
 
@@ -69,12 +83,19 @@ class Stores:
     cases: CaseStore
     entities: EntityStore
     audit: AuditStore
+    proposals: ProposalStore
     close: Callable[[], None] = lambda: None
 
 
 def build_stores(settings: Settings) -> Stores:
     if not settings.database_url:
-        return Stores(InMemoryEventStore(), InMemoryCaseStore(), InMemoryEntityStore(), AuditLog())
+        return Stores(
+            InMemoryEventStore(),
+            InMemoryCaseStore(),
+            InMemoryEntityStore(),
+            AuditLog(),
+            InMemoryProposalStore(),
+        )
 
     from storage.database import Database, apply_migrations
     from storage.postgres import (
@@ -82,6 +103,7 @@ def build_stores(settings: Settings) -> Stores:
         PostgresCaseStore,
         PostgresEntityStore,
         PostgresEventStore,
+        PostgresProposalStore,
     )
 
     db = Database(settings.database_url, schema=settings.database_schema)
@@ -91,6 +113,7 @@ def build_stores(settings: Settings) -> Stores:
         PostgresCaseStore(db),
         PostgresEntityStore(db),
         PostgresAuditLog(db),
+        PostgresProposalStore(db),
         close=db.close,
     )
 
@@ -99,9 +122,24 @@ def create_app(
     settings: Settings | None = None,
     *,
     pod_resolver: Callable[[str, str], PodContext] | None = None,
+    executor: Executor | None = None,
+    stores: Stores | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
-    stores = build_stores(settings)
+    stores = stores or build_stores(settings)
+
+    if executor is None and settings.executor == "k8s":
+        from responder.quarantine import KubernetesPodApi
+
+        executor = KubernetesExecutor(KubernetesPodApi())
+    response = ResponseService(
+        stores.proposals,
+        stores.cases,
+        stores.audit,
+        load_policies(),
+        executor,
+        environment=settings.environment,
+    )
 
     engine = CorrelationEngine(stores.cases)
     evidence: EvidenceStore = (
@@ -143,6 +181,7 @@ def create_app(
     app = FastAPI(title="CloudShield", version="0.2.0", lifespan=lifespan)
     app.include_router(build_ingestion_router(pipeline, adapters, settings.credentials, coverage))
     app.include_router(build_cases_router(stores.cases, stores.audit, stores.entities))
+    app.include_router(build_response_router(response, settings.analysts))
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
