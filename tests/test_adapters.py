@@ -7,6 +7,11 @@ from common.timeutil import parse_time
 from ingestion.adapters import PayloadError, WazuhAdapter
 from tests.conftest import ACCOUNT, CLUSTER, NOW, fixture_bytes
 
+# Identifiers from the S1 fixtures (synthetic; not credentials).
+S1_POD_UID = "8b0e3c52-1d7a-4f43-9e6b-3a2c5d9f0e17"
+S1_NODE_INSTANCE = "i-0a1b2c3d4e5f60718"
+WEB01_INSTANCE = "i-0f1e2d3c4b5a69788"
+
 
 def _event(adapter, raw: bytes):
     payload = adapter.parse(raw)
@@ -22,7 +27,7 @@ def test_falco_alert_is_normalized_with_pod_context(falco):
     assert event.source_event_id == "6f1c2a9e-4b7d-4d1e-9a51-2c0e7f3b8a10"
     assert event.resource_id == "k8s:pod/shop/checkout-7d9f6c-x2k8p"
     assert (event.cluster, event.account_id) == (CLUSTER, ACCOUNT)
-    assert event.keys.pod_uid == "8b0e3c52-1d7a-4f43-9e6b-3a2c5d9f0e17"
+    assert event.keys.pod_uid == S1_POD_UID
     assert event.severity.normalized is Severity.MEDIUM
     assert event.severity.original == "Warning"
     assert event.event_type == "process.unexpected_execution"
@@ -41,8 +46,8 @@ def test_guardduty_finding_maps_pod_uid_and_scope(guardduty):
 
     assert event.cluster == CLUSTER
     assert event.account_id == ACCOUNT
-    assert event.keys.pod_uid == "8b0e3c52-1d7a-4f43-9e6b-3a2c5d9f0e17"
-    assert event.keys.instance_id == "i-0a1b2c3d4e5f60718"
+    assert event.keys.pod_uid == S1_POD_UID
+    assert event.keys.instance_id == S1_NODE_INSTANCE
     assert event.event_type == "guardduty.Execution:Runtime/NewBinaryExecuted"
     assert event.severity.normalized is Severity.MEDIUM
 
@@ -68,11 +73,11 @@ def test_wazuh_alert_uses_agent_instance_label():
                 "description": "sshd: brute force trying to get access",
                 "mitre": {"id": ["T1110"]},
             },
-            "agent": {"id": "003", "name": "web-01", "labels": {"aws.instance_id": "i-0f1e2d3c4b5a69788"}},
+            "agent": {"id": "003", "name": "web-01", "labels": {"aws.instance_id": WEB01_INSTANCE}},
         }
     ).encode()
     event = _event(WazuhAdapter(account_id=ACCOUNT), raw)
-    assert event.keys.instance_id == "i-0f1e2d3c4b5a69788"
+    assert event.keys.instance_id == WEB01_INSTANCE
     assert event.severity.normalized is Severity.MEDIUM
     assert event.event_time == parse_time("2026-10-28T14:05:00Z")
 
