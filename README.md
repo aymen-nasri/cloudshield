@@ -8,6 +8,7 @@
 with grounded AI investigations and response actions that cannot bypass policy or people.
 
 ![Status](https://img.shields.io/badge/status-active%20development-orange)
+[![CI](https://github.com/aymen-nasri/cloudshield/actions/workflows/ci.yml/badge.svg)](https://github.com/aymen-nasri/cloudshield/actions/workflows/ci.yml)
 ![AWS](https://img.shields.io/badge/AWS-EKS%20%C2%B7%20GuardDuty%20%C2%B7%20Bedrock-FF9900?logo=amazonwebservices&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-EKS%20%C2%B7%20RBAC%20%C2%B7%20NetworkPolicy-326CE5?logo=kubernetes&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-FastAPI%20%C2%B7%20Pydantic-3776AB?logo=python&logoColor=white)
@@ -261,7 +262,7 @@ sequenceDiagram
     participant Ver as Verifier + reports
 
     Pod->>Falco: unexpected process spawned (syscall)
-    Falco->>Ing: alert via Falcosidekick (HMAC-signed webhook)
+    Falco->>Ing: alert via Falcosidekick (token-authenticated webhook)
     Ing->>Ing: validate, dedupe, normalize to OCSF, archive raw to S3
     Ing->>Cor: normalized event
     Cor->>Cor: pod → workload → service account → IAM role → node
@@ -352,7 +353,7 @@ Every integration in CloudShield defines what crosses it **and** the protection 
 |---|---|---|
 | GuardDuty → EventBridge → SQS → adapter | Finding IDs, resource references, timestamps | Filter event types, verify origin, deduplicate |
 | Wazuh → adapter | Host and security alerts with source metadata | Authenticate source; preserve raw event |
-| Falco → Falcosidekick → adapter | Runtime alerts with container and pod context | HMAC-signed; alert text treated as **untrusted input** |
+| Falco → Falcosidekick → adapter | Runtime alerts with container and pod context | Bearer token inside the cluster; alert text treated as **untrusted input** |
 | Kubernetes API → enrichment | Pod, namespace, owner, service account metadata | Read-only RBAC; lookups cached and timestamped |
 | AWS read role → enrichment | Resource attributes, scoped IAM context | Least privilege; no write permissions |
 | VPC Flow Logs / Hubble → correlation | Observed endpoints and flow metadata | Never infer full reachability from partial logs |
@@ -386,20 +387,28 @@ flowchart LR
     Q -- "max receives exceeded" --> DLQ["Dead-letter queue<br/>+ coverage alert"]
 ```
 
-**Ingestion contract (simplified):**
+**Ingestion contract** ([`services/ingestion/pipeline.py`](services/ingestion/pipeline.py)):
 
 ```python
-async def ingest(raw: bytes, source: Source) -> IngestResult:
-    payload = source.verify_and_parse(raw)            # HMAC / IAM auth, size and schema checks
-    dedup_key = source.dedup_key(payload)             # sha256(source + source_event_id)
-    if await events.exists(dedup_key):
-        return IngestResult.duplicate(dedup_key)
-    uri, checksum = await evidence.archive(raw)       # S3: SSE-KMS, versioned, Object Lock
-    event = source.to_ocsf(payload, raw_uri=uri, checksum=checksum)
-    await events.insert(event, dedup_key=dedup_key)   # unique constraint is the second line of defense
-    await correlation.enqueue(event.event_id)
-    return IngestResult.accepted(event.event_id)
+def ingest(self, raw: bytes, adapter: SourceAdapter) -> IngestResult:
+    payload = adapter.parse(raw)                      # size limit, JSON object, required fields
+    key = dedup_key(adapter.name, adapter.source_event_id(payload))
+    if self.events.exists(key):
+        return IngestResult("duplicate", key)
+
+    now = self.clock()
+    uri, checksum = self.evidence.archive(adapter.name, raw, now)   # S3: SSE-KMS, versioned, Object Lock
+    event = adapter.to_event(payload, event_id=new_id("evt"), ingest_time=now, raw_uri=uri, checksum=checksum)
+    try:
+        self.events.insert(event, key)                # unique constraint is the second line of defense
+    except DuplicateEventError:
+        return IngestResult("duplicate", key)
+    if self.on_accepted:
+        self.on_accepted(event)                       # correlation
+    return IngestResult("accepted", key, event.event_id)
 ```
+
+Producers authenticate before this runs ([`services/ingestion/auth.py`](services/ingestion/auth.py)), and an unconfigured source is always rejected.
 
 ### Reliability guarantees
 
@@ -860,23 +869,25 @@ flowchart TD
     W -- "rejected / expired" --> D2["NO ACTION"]
 ```
 
-The policy is declarative and version-controlled, and the policy engine is deterministic code that the LLM cannot reach:
+The policy is declarative and version-controlled ([`services/policy/policies/actions.yaml`](services/policy/policies/actions.yaml)), and the policy engine is deterministic code that the LLM cannot reach. The file is pure data with no expressions to evaluate, so nothing echoed into a proposal can change how a rule is read:
 
 ```yaml
 actions:
   k8s.pod.quarantine_label:
     class: reversible_test
     environments: [lab]
-    allowed_namespaces: [shop]
-    approvers:
+    target:
+      kinds: [Pod]
+      allowed_namespaces: [shop]
+      denied_namespaces: [kube-system, cloudshield]
+    approvals:
       min: 1
       roles: [incident-responder]
-      second_approver_if: target.labels["cloudshield.io/tier"] == "critical"
-    approval_ttl: 15m
+      ttl_minutes: 15
+      escalate_when_labels:
+        cloudshield.io/tier: critical
+      escalated_min: 2
     require_dry_run: true
-    deny_if:
-      - target.namespace in ["kube-system", "cloudshield"]
-      - target.kind != "Pod"
     rollback: k8s.pod.remove_quarantine_label
 ```
 
@@ -970,8 +981,8 @@ COVERAGE   Falco ● ok    GuardDuty ● ok    Wazuh ● degraded (no heartbeat 
 
 | Method | Endpoint | Purpose | Required scope |
 |---|---|---|---|
-| `POST` | `/v1/ingest/falco` | Falcosidekick webhook (HMAC-verified) | `ingest:falco` |
-| `POST` | `/v1/ingest/wazuh` | Wazuh integrator webhook | `ingest:wazuh` |
+| `POST` | `/v1/ingest/falco` | Falcosidekick webhook (bearer token) | `ingest:falco` |
+| `POST` | `/v1/ingest/wazuh` | Wazuh integration webhook (HMAC-SHA256 signed body) | `ingest:wazuh` |
 | — | *worker* `aws-findings-consumer` | Consumes GuardDuty / Security Hub findings from SQS | IAM role |
 | `GET` | `/v1/cases` | List cases (filter by status, severity, entity) | `case:read` |
 | `GET` | `/v1/cases/{id}` | Case detail: entities, evidence, investigations, proposals | `case:read` |
@@ -1248,28 +1259,33 @@ Answers to the questions that shape the first release:
 ```text
 cloudshield/
 ├── services/
-│   ├── ingestion/        # FastAPI adapters (falco, wazuh, aws), validation, OCSF mapping
-│   ├── correlation/      # dedup, entity resolution, time-window rules
-│   ├── enrichment/       # read-only AWS + Kubernetes lookups
-│   ├── cases/            # case API, timeline, hash-chained audit log
-│   ├── investigator/     # Bedrock client, RAG retrieval, prompt templates, output validation
-│   ├── policy/           # deterministic policy engine + action allowlist
-│   └── responder/        # Step Functions definitions, Lambda executors, verifiers
-├── console/              # analyst web UI
-├── schemas/              # OCSF subset mappings, JSON Schemas, Pydantic models
+│   ├── common/           # Pydantic contracts: NormalizedEvent, Investigation, ResponseProposal
+│   ├── core/             # FastAPI app factory wiring ingestion, correlation and cases
+│   ├── ingestion/        # adapters (falco, guardduty, wazuh), auth, dedup, evidence archive, SQS worker
+│   ├── correlation/      # rules C-01..C-04
+│   ├── enrichment/       # read-only pod → workload → service account → IAM role → instance lookups
+│   ├── cases/            # cases, timeline, proposal state machine, hash-chained audit log, SQL migrations
+│   ├── investigator/     # bundles, redaction, Bedrock client, prompt, citation validation
+│   ├── policy/           # deterministic policy engine, action allowlist, hash-bound approvals
+│   └── responder/        # quarantine executor and verifier, Lambda handler, Step Functions definition
+├── console/              # analyst web UI (M2)
+├── schemas/              # JSON Schemas generated from the Pydantic contracts
 ├── runbooks/             # curated RAG corpus (Markdown)
 ├── detections/
 │   ├── falco/            # custom Falco rules
-│   └── fixtures/         # labeled, replayable incidents
+│   └── fixtures/         # labeled, replayable incidents (S1, S8)
 ├── infra/
-│   ├── tofu/             # OpenTofu: VPC, EKS, IAM, EventBridge, SQS, S3, Bedrock access
-│   ├── helm/             # CloudShield, Falco and demo-app charts
-│   ├── ansible/          # Linux host hardening + Wazuh agent
-│   └── policies/         # Kyverno + NetworkPolicy baselines
+│   ├── tofu/envs/lab/    # OpenTofu: VPC, EKS, GuardDuty → EventBridge → SQS, S3 evidence, budgets, CI OIDC
+│   ├── kind/             # local lab cluster
+│   ├── k8s/              # demo "shop" application
+│   ├── helm/             # CloudShield chart, Falco values
+│   ├── ansible/          # Linux host hardening, Wazuh agent, signed Wazuh integration
+│   └── policies/         # Kyverno, NetworkPolicy baseline, RBAC
 ├── evals/                # AI grounding and safety evaluation harness
-├── tests/                # unit, integration and negative policy tests
-├── docs/                 # ADRs, threat model, diagrams
-├── .github/workflows/    # CI: test, scan, sign, deploy
+├── scripts/              # fixture replay, schema export
+├── tests/                # unit, API and negative policy tests
+├── docs/adr/             # architecture decision records
+├── .github/workflows/    # CI: lint, typecheck, test, secret scan, image scan, SBOM, sign
 └── Makefile
 ```
 
@@ -1277,29 +1293,44 @@ cloudshield/
 
 ## Getting started
 
-> The local lab is delivered in milestone **M1** and the core services in **M2**. The workflow below is the developer experience those milestones produce.
+> **Status:** the core API, the policy gate, the investigator contract, the responder and the test suite run today. Cases are held in memory until the PostgreSQL store lands (M2). The kind and AWS labs are defined in code and are being brought up as part of M1.
 
-**Prerequisites:** Docker, kind, kubectl, Helm, Python 3.12+, Make. For the AWS lab you also need OpenTofu, the AWS CLI and a dedicated AWS account with a budget alarm.
+**Prerequisites:** Python 3.12+, Docker, Make. For the local lab: kind, kubectl, Helm. For the AWS lab: OpenTofu, the AWS CLI and a dedicated AWS account.
 
 ```bash
 git clone https://github.com/aymen-nasri/cloudshield.git
 cd cloudshield
-
-make lab-up          # kind cluster + Falco + Falcosidekick + demo "shop" app + baseline policies
-make core-up         # FastAPI services, PostgreSQL, OpenSearch (docker compose)
-make demo-incident   # replays scenario S1 (suspicious process in pod)
-make console         # opens the analyst console at http://localhost:8080
-make test            # unit, integration and negative policy tests
-make lab-down        # tears everything down
+make install         # editable install with dev, AWS and Kubernetes extras
+make check           # ruff, mypy, pytest, schema drift check
+make evals           # score the investigator evaluation candidates
 ```
 
-**AWS lab:**
+**Run the core API and replay scenario S1:**
+
+```bash
+cp .env.example .env # then set real values
+make core-up         # core API, PostgreSQL, OpenSearch (docker compose)
+set -a; . ./.env; set +a
+make demo-incident   # replays GuardDuty + Falco out of order; both land in one case
+curl localhost:8080/v1/cases
+```
+
+**Local Kubernetes lab:**
+
+```bash
+make lab-up          # kind + Calico + demo "shop" app + quarantine-ready NetworkPolicies + RBAC + Falco
+make lab-down
+```
+
+**AWS lab** (see [ADR 0004](docs/adr/0004-lab-account-and-state.md)):
 
 ```bash
 cd infra/tofu/envs/lab
-tofu init && tofu apply      # VPC, EKS, GuardDuty → EventBridge → SQS, S3 evidence bucket, IAM roles
-make aws-demo                # runs S1 on EKS with GuardDuty Runtime Monitoring
-make aws-down                # destroys the lab to stop costs
+cp terraform.tfvars.example terraform.tfvars
+tofu init -backend-config="bucket=<state-bucket>" -backend-config="region=eu-west-1"
+tofu apply -target=aws_budgets_budget.lab   # budget alarms first
+tofu apply                                  # VPC, EKS, GuardDuty → EventBridge → SQS, S3 evidence, IAM
+tofu destroy                                # after each demo window
 ```
 
 ---

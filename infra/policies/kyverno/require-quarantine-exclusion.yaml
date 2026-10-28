@@ -1,0 +1,38 @@
+# Every allow-policy in a protected namespace must exclude quarantined pods, otherwise the
+# quarantine label would silently stop working. Audit first, then switch to Enforce (M4).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-quarantine-exclusion
+  annotations:
+    policies.kyverno.io/title: Require quarantine exclusion
+    policies.kyverno.io/category: CloudShield
+    policies.kyverno.io/description: >-
+      NetworkPolicies in namespaces labelled cloudshield.io/protected=true must not select
+      pods labelled cloudshield.io/quarantine=true.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: allow-policies-exclude-quarantined-pods
+      match:
+        any:
+          - resources:
+              kinds: [NetworkPolicy]
+              namespaceSelector:
+                matchLabels:
+                  cloudshield.io/protected: "true"
+      exclude:
+        any:
+          - resources:
+              names: [default-deny-all]
+      validate:
+        message: >-
+          Add matchExpressions {key: cloudshield.io/quarantine, operator: NotIn, values: ["true"]}
+          to spec.podSelector so quarantined pods fall back to default-deny.
+        deny:
+          conditions:
+            all:
+              - key: "{{ request.object.spec.podSelector.matchExpressions || `[]` | [?key=='cloudshield.io/quarantine' && operator=='NotIn'] | length(@) }}"
+                operator: Equals
+                value: 0

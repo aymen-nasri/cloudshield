@@ -1,0 +1,46 @@
+# Enrol lab hosts with the Wazuh manager and label each agent with its EC2 instance ID, which
+# CloudShield's correlation rule C-02 joins on.
+- name: Install and enrol the Wazuh agent
+  hosts: lab_hosts
+  become: true
+  vars:
+    wazuh_version: "4.9.2"
+  tasks:
+    - name: Add the Wazuh repository
+      ansible.builtin.yum_repository:
+        name: wazuh
+        description: Wazuh repository
+        baseurl: https://packages.wazuh.com/4.x/yum/
+        gpgkey: https://packages.wazuh.com/key/GPG-KEY-WAZUH
+        gpgcheck: true
+
+    - name: Install the agent
+      ansible.builtin.dnf:
+        name: "wazuh-agent-{{ wazuh_version }}"
+        state: present
+      environment:
+        WAZUH_MANAGER: "{{ wazuh_manager }}"
+        WAZUH_AGENT_NAME: "{{ inventory_hostname }}"
+
+    - name: Label the agent with its EC2 instance ID
+      ansible.builtin.blockinfile:
+        path: /var/ossec/etc/ossec.conf
+        marker: "<!-- {mark} CLOUDSHIELD LABELS -->"
+        insertafter: "<ossec_config>"
+        block: |
+          <labels>
+            <label key="aws.instance_id">{{ aws_instance_id }}</label>
+          </labels>
+      notify: Restart wazuh-agent
+
+    - name: Start the agent
+      ansible.builtin.service:
+        name: wazuh-agent
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Restart wazuh-agent
+      ansible.builtin.service:
+        name: wazuh-agent
+        state: restarted

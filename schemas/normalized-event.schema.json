@@ -1,0 +1,220 @@
+{
+  "$defs": {
+    "CorrelationKeys": {
+      "description": "Stable identifiers the correlation engine joins on (rules C-01..C-03).",
+      "properties": {
+        "instance_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instance Id"
+        },
+        "pod_uid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pod Uid"
+        },
+        "principal_arn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Principal Arn"
+        }
+      },
+      "title": "CorrelationKeys",
+      "type": "object"
+    },
+    "Severity": {
+      "enum": [
+        "informational",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "SeverityInfo": {
+      "properties": {
+        "normalized": {
+          "$ref": "#/$defs/Severity"
+        },
+        "original": {
+          "title": "Original",
+          "type": "string"
+        }
+      },
+      "required": [
+        "normalized",
+        "original"
+      ],
+      "title": "SeverityInfo",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/aymen-nasri/cloudshield/schemas/NormalizedEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Minimum event record. The raw payload is never modified; it is referenced by URI + checksum.",
+  "properties": {
+    "account_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Account Id"
+    },
+    "checksum": {
+      "title": "Checksum",
+      "type": "string"
+    },
+    "cluster": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cluster"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_time": {
+      "format": "date-time",
+      "title": "Event Time",
+      "type": "string"
+    },
+    "event_type": {
+      "title": "Event Type",
+      "type": "string"
+    },
+    "identity_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Identity Id"
+    },
+    "ingest_time": {
+      "format": "date-time",
+      "title": "Ingest Time",
+      "type": "string"
+    },
+    "keys": {
+      "$ref": "#/$defs/CorrelationKeys",
+      "default": {
+        "instance_id": null,
+        "pod_uid": null,
+        "principal_arn": null
+      }
+    },
+    "namespace": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Namespace"
+    },
+    "ocsf": {
+      "additionalProperties": true,
+      "title": "Ocsf",
+      "type": "object"
+    },
+    "raw_evidence_uri": {
+      "title": "Raw Evidence Uri",
+      "type": "string"
+    },
+    "resource_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Resource Id"
+    },
+    "schema_version": {
+      "default": "cloudshield-ocsf-subset/1.0 (OCSF 1.3.0)",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "severity": {
+      "$ref": "#/$defs/SeverityInfo"
+    },
+    "source": {
+      "enum": [
+        "falco",
+        "wazuh",
+        "guardduty",
+        "k8s_audit"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "source_event_id": {
+      "title": "Source Event Id",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "source",
+    "source_event_id",
+    "event_time",
+    "ingest_time",
+    "event_type",
+    "title",
+    "severity",
+    "raw_evidence_uri",
+    "checksum",
+    "ocsf"
+  ],
+  "title": "NormalizedEvent",
+  "type": "object"
+}

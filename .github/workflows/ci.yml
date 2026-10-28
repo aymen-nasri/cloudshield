@@ -1,0 +1,100 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: lint, typecheck, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy services
+      - run: pytest -q
+      - name: Schemas match the Pydantic models
+        run: python scripts/export_schemas.py --check
+      - name: AI evaluation harness (stored candidates)
+        run: python evals/run_evals.py
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  image:
+    name: build and scan image
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: docker build -t cloudshield/core:${{ github.sha }} .
+      - name: Trivy image scan (fail on fixable critical)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: cloudshield/core:${{ github.sha }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Trivy config scan (report only; audit before enforce)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: .
+          exit-code: "0"
+      - name: SBOM (CycloneDX)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: cloudshield/core:${{ github.sha }}
+          format: cyclonedx
+          output: sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
+
+  # Runs only on main and only once the AWS lab exists (AWS_ROLE_ARN repository variable set).
+  publish:
+    name: sign and push to ECR
+    if: github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    needs: [image, secrets]
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC: short-lived AWS credentials and keyless Cosign signing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push
+        id: push
+        run: |
+          IMAGE="${{ steps.ecr.outputs.registry }}/cloudshield/core:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "digest=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE")" >> "$GITHUB_OUTPUT"
+      - uses: sigstore/cosign-installer@v3
+      - name: Keyless sign (verified at admission by Kyverno)
+        run: cosign sign --yes "${{ steps.push.outputs.digest }}"

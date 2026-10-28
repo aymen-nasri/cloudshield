@@ -1,0 +1,26 @@
+# Only CloudShield images signed by this repository's GitHub Actions workflow may run in the
+# cloudshield namespace (keyless Cosign signatures, verified against Sigstore's transparency log).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-cloudshield-images
+spec:
+  validationFailureAction: Audit
+  webhookTimeoutSeconds: 30
+  rules:
+    - name: require-keyless-signature
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [cloudshield]
+      verifyImages:
+        - imageReferences:
+            - "*.dkr.ecr.*.amazonaws.com/cloudshield/*"
+          attestors:
+            - entries:
+                - keyless:
+                    subject: "https://github.com/aymen-nasri/cloudshield/.github/workflows/ci.yml@refs/heads/main"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev
