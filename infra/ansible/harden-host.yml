@@ -1,0 +1,52 @@
+# Baseline hardening for lab Linux hosts (Amazon Linux 2023 / RHEL 9).
+#   ansible-playbook -i inventory.ini harden-host.yml
+- name: Harden CloudShield lab hosts
+  hosts: lab_hosts
+  become: true
+  tasks:
+    - name: Apply security updates
+      ansible.builtin.dnf:
+        name: "*"
+        security: true
+        state: latest
+
+    - name: Disable SSH password and root login
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config.d/50-cloudshield.conf
+        line: "{{ item }}"
+        create: true
+        mode: "0600"
+      loop:
+        - PasswordAuthentication no
+        - PermitRootLogin no
+        - MaxAuthTries 3
+      notify: Restart sshd
+
+    - name: Ensure auditd is running
+      ansible.builtin.service:
+        name: auditd
+        state: started
+        enabled: true
+
+    - name: Audit writes to identity and sudo configuration
+      ansible.builtin.copy:
+        dest: /etc/audit/rules.d/50-cloudshield.rules
+        mode: "0600"
+        content: |
+          -w /etc/passwd -p wa -k identity
+          -w /etc/shadow -p wa -k identity
+          -w /etc/sudoers -p wa -k privilege
+          -w /etc/sudoers.d/ -p wa -k privilege
+          -w /etc/cron.d/ -p wa -k persistence
+          -w /etc/systemd/system/ -p wa -k persistence
+      notify: Reload audit rules
+
+  handlers:
+    - name: Restart sshd
+      ansible.builtin.service:
+        name: sshd
+        state: restarted
+
+    - name: Reload audit rules
+      ansible.builtin.command: augenrules --load
+      changed_when: true

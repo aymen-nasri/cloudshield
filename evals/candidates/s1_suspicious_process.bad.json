@@ -1,0 +1,11 @@
+{
+  "synopsis": "Hand-written NEGATIVE example used to test the scorer: it cites an event that does not exist and misses a required fact.",
+  "observed_facts": [
+    {"statement": "An attacker gained root on the node", "evidence_ids": ["evt_99"]},
+    {"statement": "A shell ran a downloaded script from 198.51.100.23", "evidence_ids": ["evt_1"]}
+  ],
+  "hypotheses": [],
+  "missing_evidence": [],
+  "containment_options": [],
+  "confidence_limits": "None stated."
+}

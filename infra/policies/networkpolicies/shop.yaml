@@ -1,0 +1,66 @@
+# Quarantine-ready network baseline for the "shop" namespace.
+# 1. default-deny-all applies to every pod.
+# 2. Each allow-policy excludes pods labelled cloudshield.io/quarantine=true.
+# Labelling a pod therefore removes it from every allow-policy and leaves only default-deny.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: shop
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: shop
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: cloudshield.io/quarantine, operator: NotIn, values: ["true"] }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: checkout-allow
+  namespace: shop
+spec:
+  podSelector:
+    matchLabels: { app: checkout }
+    matchExpressions:
+      - { key: cloudshield.io/quarantine, operator: NotIn, values: ["true"] }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: cart }
+      ports: [{ protocol: TCP, port: 8080 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cart-allow
+  namespace: shop
+spec:
+  podSelector:
+    matchLabels: { app: cart }
+    matchExpressions:
+      - { key: cloudshield.io/quarantine, operator: NotIn, values: ["true"] }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app: checkout }
+      ports: [{ protocol: TCP, port: 8080 }]

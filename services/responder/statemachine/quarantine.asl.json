@@ -1,0 +1,105 @@
+{
+  "Comment": "CloudShield: approval-bound, reversible pod quarantine. Any failure path ends without action or with escalation.",
+  "StartAt": "DryRun",
+  "States": {
+    "DryRun": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ExecutorFunctionArn}",
+        "Payload": {
+          "mode": "dry_run",
+          "proposal.$": "$.proposal",
+          "proposal_hash.$": "$.proposal_hash"
+        }
+      },
+      "ResultSelector": { "status.$": "$.Payload.status" },
+      "ResultPath": "$.dry_run",
+      "TimeoutSeconds": 60,
+      "Next": "DryRunPassed?"
+    },
+    "DryRunPassed?": {
+      "Type": "Choice",
+      "Choices": [
+        { "Variable": "$.dry_run.status", "StringEquals": "dry_run_ok", "Next": "AwaitApproval" }
+      ],
+      "Default": "Rejected"
+    },
+    "AwaitApproval": {
+      "Type": "Task",
+      "Comment": "Pauses until the console calls SendTaskSuccess with {bound_hash} or SendTaskFailure(ApprovalRejected).",
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": {
+        "FunctionName": "${ApprovalNotifierFunctionArn}",
+        "Payload": {
+          "proposal_id.$": "$.proposal.proposal_id",
+          "proposal_hash.$": "$.proposal_hash",
+          "task_token.$": "$$.Task.Token"
+        }
+      },
+      "TimeoutSeconds": 900,
+      "ResultPath": "$.approval",
+      "Catch": [
+        { "ErrorEquals": ["States.Timeout"], "ResultPath": "$.error", "Next": "Expired" },
+        { "ErrorEquals": ["ApprovalRejected"], "ResultPath": "$.error", "Next": "Rejected" }
+      ],
+      "Next": "Execute"
+    },
+    "Execute": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ExecutorFunctionArn}",
+        "Payload": {
+          "mode": "execute",
+          "proposal.$": "$.proposal",
+          "proposal_hash.$": "$.proposal_hash",
+          "approval.$": "$.approval"
+        }
+      },
+      "ResultSelector": { "status.$": "$.Payload.status", "detail.$": "$.Payload.detail" },
+      "ResultPath": "$.execution",
+      "TimeoutSeconds": 60,
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Failed" }],
+      "Next": "Verify"
+    },
+    "Verify": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${ExecutorFunctionArn}",
+        "Payload": {
+          "mode": "verify",
+          "proposal.$": "$.proposal",
+          "proposal_hash.$": "$.proposal_hash"
+        }
+      },
+      "ResultSelector": { "passed.$": "$.Payload.passed", "checks.$": "$.Payload.checks" },
+      "ResultPath": "$.verification",
+      "TimeoutSeconds": 60,
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Failed" }],
+      "Next": "Verified?"
+    },
+    "Verified?": {
+      "Type": "Choice",
+      "Choices": [{ "Variable": "$.verification.passed", "BooleanEquals": true, "Next": "Verified" }],
+      "Default": "Failed"
+    },
+    "Verified": { "Type": "Succeed" },
+    "Failed": {
+      "Type": "Fail",
+      "Error": "ResponseFailed",
+      "Cause": "Execution or verification failed; the case is escalated to on-call."
+    },
+    "Rejected": { "Type": "Fail", "Error": "Rejected", "Cause": "Dry-run failed or the approver rejected." },
+    "Expired": { "Type": "Fail", "Error": "ApprovalExpired", "Cause": "No approval within 15 minutes; no action taken." }
+  }
+}

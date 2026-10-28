@@ -1,0 +1,131 @@
+{
+  "$defs": {
+    "Target": {
+      "properties": {
+        "cluster": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cluster"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Labels",
+          "type": "object"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "namespace": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Namespace"
+        },
+        "uid": {
+          "title": "Uid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "uid"
+      ],
+      "title": "Target",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/aymen-nasri/cloudshield/schemas/ResponseProposal",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "action_type": {
+      "title": "Action Type",
+      "type": "string"
+    },
+    "case_id": {
+      "title": "Case Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "dry_run_passed": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dry Run Passed"
+    },
+    "environment": {
+      "title": "Environment",
+      "type": "string"
+    },
+    "impact_preview": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Impact Preview",
+      "type": "object"
+    },
+    "parameters": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Parameters",
+      "type": "object"
+    },
+    "proposal_id": {
+      "title": "Proposal Id",
+      "type": "string"
+    },
+    "rationale": {
+      "title": "Rationale",
+      "type": "string"
+    },
+    "requested_by": {
+      "title": "Requested By",
+      "type": "string"
+    },
+    "target": {
+      "$ref": "#/$defs/Target"
+    }
+  },
+  "required": [
+    "proposal_id",
+    "case_id",
+    "action_type",
+    "target",
+    "environment",
+    "rationale",
+    "requested_by",
+    "created_at"
+  ],
+  "title": "ResponseProposal",
+  "type": "object"
+}

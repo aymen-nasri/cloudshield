@@ -1,0 +1,8 @@
+# Reviewed false positives (generic-api-key). These lines compared synthetic fixture identifiers
+# (a pod UID and EC2 instance IDs) against `event.keys.*`; the word "keys" matched the rule.
+# The test now asserts on `ids.*`, so only these historical commits are affected.
+fbb8c1b84b133812632a648f0f7af2c1119feda7:tests/test_adapters.py:generic-api-key:23
+fbb8c1b84b133812632a648f0f7af2c1119feda7:tests/test_adapters.py:generic-api-key:42
+fbb8c1b84b133812632a648f0f7af2c1119feda7:tests/test_adapters.py:generic-api-key:43
+fbb8c1b84b133812632a648f0f7af2c1119feda7:tests/test_adapters.py:generic-api-key:65
+883c1493fed955825c69906797b5822ce51a2fa9:tests/test_adapters.py:generic-api-key:80

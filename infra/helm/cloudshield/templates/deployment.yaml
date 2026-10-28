@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudshield-core
+  labels: { app.kubernetes.io/name: cloudshield-core }
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels: { app.kubernetes.io/name: cloudshield-core }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: cloudshield-core }
+    spec:
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: core
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ name: http, containerPort: 8080 }]
+          env:
+            - { name: CLOUDSHIELD_CLUSTER, value: {{ .Values.cluster | quote }} }
+            - { name: CLOUDSHIELD_ACCOUNT_ID, value: {{ .Values.accountId | quote }} }
+          envFrom:
+            - secretRef: { name: {{ .Values.credentialsSecret }} }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudshield-core
+spec:
+  selector: { app.kubernetes.io/name: cloudshield-core }
+  ports:
+    - { name: http, port: {{ .Values.service.port }}, targetPort: http }

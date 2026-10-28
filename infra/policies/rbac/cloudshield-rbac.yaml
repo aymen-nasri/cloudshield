@@ -1,0 +1,70 @@
+# Two identities with no overlap:
+#   cloudshield-investigator: read-only, cluster-wide metadata for enrichment.
+#   cloudshield-responder:    may patch pod labels in protected namespaces, nothing else.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudshield-investigator
+  namespace: cloudshield
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloudshield-investigator
+rules:
+  - apiGroups: [""]
+    resources: [pods, namespaces, nodes, serviceaccounts, services]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [get, list, watch]
+  # Deliberately absent: secrets, pods/exec, pods/log, any write verb.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudshield-investigator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cloudshield-investigator
+subjects:
+  - kind: ServiceAccount
+    name: cloudshield-investigator
+    namespace: cloudshield
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudshield-responder
+  namespace: cloudshield
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloudshield-responder
+  namespace: shop
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, patch]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cloudshield-responder
+  namespace: shop
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cloudshield-responder
+subjects:
+  - kind: ServiceAccount
+    name: cloudshield-responder
+    namespace: cloudshield

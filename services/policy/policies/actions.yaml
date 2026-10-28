@@ -1,0 +1,51 @@
+# CloudShield response allowlist. Anything not listed here is denied.
+# Changes to this file go through code review like any other code (CODEOWNERS: security).
+version: 1
+actions:
+  k8s.pod.quarantine_label:
+    class: reversible_test
+    environments: [lab]
+    target:
+      kinds: [Pod]
+      allowed_namespaces: [shop]
+      denied_namespaces: [kube-system, cloudshield]
+    approvals:
+      min: 1
+      roles: [incident-responder]
+      ttl_minutes: 15
+      escalate_when_labels:
+        cloudshield.io/tier: critical
+      escalated_min: 2
+    require_dry_run: true
+    rollback: k8s.pod.remove_quarantine_label
+
+  k8s.pod.remove_quarantine_label:
+    class: reversible_test
+    environments: [lab]
+    target:
+      kinds: [Pod]
+      allowed_namespaces: [shop]
+      denied_namespaces: [kube-system, cloudshield]
+    approvals:
+      min: 1
+      roles: [incident-responder]
+      ttl_minutes: 15
+    require_dry_run: true
+
+  notify.slack:
+    class: notification
+    environments: [lab, prod]
+    target:
+      kinds: [Case]
+    approvals:
+      min: 0
+    require_dry_run: false
+
+  case.escalate:
+    class: notification
+    environments: [lab, prod]
+    target:
+      kinds: [Case]
+    approvals:
+      min: 0
+    require_dry_run: false
