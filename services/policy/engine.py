@@ -69,6 +69,27 @@ class PolicyResult:
     approval_ttl: timedelta = timedelta(0)
     rollback: str | None = None
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "decision": self.decision.value,
+            "reasons": self.reasons,
+            "required_approvals": self.required_approvals,
+            "approver_roles": sorted(self.approver_roles),
+            "approval_ttl_seconds": int(self.approval_ttl.total_seconds()),
+            "rollback": self.rollback,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "PolicyResult":
+        return cls(
+            decision=Decision(data["decision"]),
+            reasons=list(data["reasons"]),
+            required_approvals=int(data["required_approvals"]),
+            approver_roles=frozenset(data["approver_roles"]),
+            approval_ttl=timedelta(seconds=int(data["approval_ttl_seconds"])),
+            rollback=data.get("rollback"),
+        )
+
 
 def load_policies(path: Path | None = None) -> dict[str, ActionPolicy]:
     if path is None:

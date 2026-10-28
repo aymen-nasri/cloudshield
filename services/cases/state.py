@@ -22,10 +22,11 @@ S = ProposalState
 TRANSITIONS: dict[ProposalState, frozenset[ProposalState]] = {
     S.DRAFT: frozenset({S.EVIDENCE_COLLECTED}),
     S.EVIDENCE_COLLECTED: frozenset({S.PROPOSED}),
-    S.PROPOSED: frozenset({S.RISK_CHECKED}),
+    S.PROPOSED: frozenset({S.RISK_CHECKED, S.REJECTED}),  # rejected: proposal expired
     S.RISK_CHECKED: frozenset({S.AWAITING_APPROVAL, S.REJECTED}),
     S.AWAITING_APPROVAL: frozenset({S.APPROVED, S.REJECTED}),
-    S.APPROVED: frozenset({S.EXECUTING}),
+    # Rejected after approval: approvals expired or the target changed before execution.
+    S.APPROVED: frozenset({S.EXECUTING, S.REJECTED}),
     S.EXECUTING: frozenset({S.VERIFIED, S.FAILED}),
     S.VERIFIED: frozenset({S.CLOSED}),
     S.FAILED: frozenset({S.CLOSED}),
