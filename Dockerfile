@@ -8,6 +8,8 @@ RUN pip install --no-cache-dir --prefix=/install ".[postgres,aws,k8s]"
 FROM python:3.12-slim
 RUN useradd --system --uid 10001 --no-create-home cloudshield
 COPY --from=build /install /usr/local
+COPY runbooks /opt/cloudshield/runbooks
+ENV CLOUDSHIELD_RUNBOOKS_DIR=/opt/cloudshield/runbooks
 USER 10001
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')"

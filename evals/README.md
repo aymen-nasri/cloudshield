@@ -13,9 +13,14 @@ autonomy ships.
 ## Running
 
 ```bash
-python evals/run_evals.py --candidates evals/candidates   # score stored outputs (no AWS needed)
-python evals/run_evals.py --bedrock --model-id <id>       # call Bedrock, then score (M3)
+python evals/run_evals.py                            # stored candidates + the offline baseline (no AWS)
+python evals/run_evals.py --bedrock --model-id <id>  # call Bedrock, then score
 ```
+
+The offline baseline (`services/investigator/offline.py`, no language model) is scored on every run
+as the floor a real model has to beat. Its first scoring found two real problems, both fixed: its
+facts left out the finding type (recall 0.5 on S1), and on a single-detector case it called the
+activity "possibly benign", the very conclusion the S8 injection plants.
 
 `evals/candidates/` holds **hand-written reference answers**, one good and one deliberately bad,
 used to test the scorer itself. They are not recorded model outputs. Real model runs are written

@@ -14,10 +14,18 @@ from cases.audit import GENESIS_HASH, ActorType, AuditRecord, format_ts, make_re
 from cases.models import Case, CaseLink
 from cases.state import ProposalState
 from common.ids import new_id
-from common.models import CorrelationKeys, NormalizedEvent, ResponseProposal, SeverityInfo, Target
+from common.models import (
+    CorrelationKeys,
+    Investigation,
+    NormalizedEvent,
+    ResponseProposal,
+    SeverityInfo,
+    Target,
+)
 from common.timeutil import utcnow
 from enrichment.graph import Edge, Entity
 from ingestion.pipeline import DuplicateEventError
+from investigator.records import InvestigationRecord
 from policy.approvals import Approval
 from policy.engine import PolicyResult
 from response.records import AlreadyExecuted, DuplicateApproval, Execution, ProposalRecord
@@ -493,3 +501,67 @@ class PostgresProposalStore:
 
     def list_for_case(self, case_id: str) -> list[ProposalRecord]:
         return self._load("incident_id = %s", case_id)
+
+
+class PostgresInvestigationStore:
+    def __init__(self, db: Database) -> None:
+        self.db = db
+
+    def insert(self, record: InvestigationRecord) -> None:
+        with self.db.pool.connection() as conn:
+            conn.execute(
+                "INSERT INTO investigation (id, incident_id, model_id, prompt_version, retrieved_doc_ids,"
+                " output, review_status, created_at, attempts, requested_by, reviewed_by)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    record.investigation_id,
+                    record.case_id,
+                    record.model_id,
+                    record.prompt_version,
+                    Jsonb(record.retrieved_doc_ids),
+                    Jsonb(record.output.model_dump(mode="json")),
+                    record.review_status,
+                    record.created_at,
+                    record.attempts,
+                    record.requested_by,
+                    record.reviewed_by,
+                ),
+            )
+
+    @staticmethod
+    def _record(r: dict[str, Any]) -> InvestigationRecord:
+        return InvestigationRecord(
+            investigation_id=r["id"],
+            case_id=r["incident_id"],
+            model_id=r["model_id"],
+            prompt_version=r["prompt_version"],
+            retrieved_doc_ids=list(r["retrieved_doc_ids"]),
+            output=Investigation.model_validate(r["output"]),
+            attempts=r["attempts"],
+            requested_by=r["requested_by"],
+            created_at=r["created_at"],
+            review_status=r["review_status"],
+            reviewed_by=r["reviewed_by"],
+        )
+
+    def get(self, investigation_id: str) -> InvestigationRecord | None:
+        with self.db.pool.connection() as conn:
+            row = conn.execute("SELECT * FROM investigation WHERE id = %s", (investigation_id,)).fetchone()
+        return self._record(row) if row else None
+
+    def list_for_case(self, case_id: str) -> list[InvestigationRecord]:
+        with self.db.pool.connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM investigation WHERE incident_id = %s ORDER BY created_at", (case_id,)
+            ).fetchall()
+        return [self._record(r) for r in rows]
+
+    def set_review(self, investigation_id: str, status: str, reviewer: str) -> bool:
+        # The WHERE clause makes a second review a no-op even under concurrent requests.
+        with self.db.pool.connection() as conn:
+            cur = conn.execute(
+                "UPDATE investigation SET review_status = %s, reviewed_by = %s"
+                " WHERE id = %s AND review_status = 'unreviewed'",
+                (status, reviewer, investigation_id),
+            )
+            return cur.rowcount == 1
