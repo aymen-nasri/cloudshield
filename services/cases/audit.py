@@ -30,8 +30,9 @@ class AuditRecord:
     hash: str
 
 
-def _digest(seq: int, ts: str, actor_type: str, actor_id: str, action: str,
-            details: dict[str, Any], prev_hash: str) -> str:
+def _digest(
+    seq: int, ts: str, actor_type: str, actor_id: str, action: str, details: dict[str, Any], prev_hash: str
+) -> str:
     body = json.dumps(
         [seq, ts, actor_type, actor_id, action, details, prev_hash],
         sort_keys=True,
@@ -46,8 +47,9 @@ class AuditLog:
         self._records: list[AuditRecord] = []
         self.clock = clock
 
-    def append(self, actor_type: ActorType, actor_id: str, action: str,
-               details: dict[str, Any]) -> AuditRecord:
+    def append(
+        self, actor_type: ActorType, actor_id: str, action: str, details: dict[str, Any]
+    ) -> AuditRecord:
         seq = len(self._records) + 1
         prev = self._records[-1].hash if self._records else GENESIS_HASH
         ts = self.clock().isoformat()

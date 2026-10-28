@@ -12,8 +12,10 @@ from responder.quarantine import QUARANTINE_LABEL, apply_quarantine, remove_quar
 
 TARGET = Target(kind="Pod", name="checkout-1", uid="uid-1", namespace="shop")
 
-DEFAULT_DENY = {"metadata": {"name": "default-deny-all"},
-                "spec": {"podSelector": {}, "policyTypes": ["Ingress", "Egress"]}}
+DEFAULT_DENY = {
+    "metadata": {"name": "default-deny-all"},
+    "spec": {"podSelector": {}, "policyTypes": ["Ingress", "Egress"]},
+}
 CHECKOUT_ALLOW = {
     "metadata": {"name": "checkout-allow"},
     "spec": {
@@ -27,15 +29,16 @@ CHECKOUT_ALLOW = {
 }
 LEAKY_ALLOW = {  # an allow-policy that forgot the exclusion (Kyverno would block it)
     "metadata": {"name": "leaky"},
-    "spec": {"podSelector": {"matchLabels": {"app": "checkout"}}, "policyTypes": ["Egress"],
-             "egress": [{}]},
+    "spec": {"podSelector": {"matchLabels": {"app": "checkout"}}, "policyTypes": ["Egress"], "egress": [{}]},
 }
 
 
 class FakePodApi:
     def __init__(self, policies=None):
-        self.pod = {"metadata": {"name": "checkout-1", "uid": "uid-1", "labels": {"app": "checkout"}},
-                    "status": {"phase": "Running"}}
+        self.pod = {
+            "metadata": {"name": "checkout-1", "uid": "uid-1", "labels": {"app": "checkout"}},
+            "status": {"phase": "Running"},
+        }
         self.policies = policies if policies is not None else [DEFAULT_DENY, CHECKOUT_ALLOW]
         self.patches = []
 
@@ -101,13 +104,24 @@ def test_rollback_removes_the_label():
 
 def _event(mode, **extra):
     proposal = ResponseProposal(
-        proposal_id="prp_1", case_id="case_1", action_type="k8s.pod.quarantine_label", target=TARGET,
-        environment="lab", rationale="x", requested_by="ai", created_at=datetime(2026, 10, 28, tzinfo=UTC),
+        proposal_id="prp_1",
+        case_id="case_1",
+        action_type="k8s.pod.quarantine_label",
+        target=TARGET,
+        environment="lab",
+        rationale="x",
+        requested_by="ai",
+        created_at=datetime(2026, 10, 28, tzinfo=UTC),
         dry_run_passed=True,
     )
     h = proposal_hash(proposal)
-    return {"mode": mode, "proposal": proposal.model_dump(mode="json"), "proposal_hash": h,
-            "approval": {"bound_hash": h}, **extra}
+    return {
+        "mode": mode,
+        "proposal": proposal.model_dump(mode="json"),
+        "proposal_hash": h,
+        "approval": {"bound_hash": h},
+        **extra,
+    }
 
 
 def test_lambda_executes_only_with_matching_approval():

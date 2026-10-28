@@ -72,7 +72,5 @@ def check_approvals(
         valid.add(a.approver)
 
     if len(valid) < policy.required_approvals:
-        raise ApprovalError(
-            f"{len(valid)} valid approval(s), {policy.required_approvals} required"
-        )
+        raise ApprovalError(f"{len(valid)} valid approval(s), {policy.required_approvals} required")
     return current

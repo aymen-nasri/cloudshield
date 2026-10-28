@@ -55,9 +55,9 @@ def pod_identity_role(eks: Any, cluster: str, namespace: str, service_account: s
 
 def instance_for_node(ec2: Any, node_name: str) -> str | None:
     """EKS node names are the instance's private DNS name."""
-    reservations = ec2.describe_instances(
-        Filters=[{"Name": "private-dns-name", "Values": [node_name]}]
-    ).get("Reservations", [])
+    reservations = ec2.describe_instances(Filters=[{"Name": "private-dns-name", "Values": [node_name]}]).get(
+        "Reservations", []
+    )
     for reservation in reservations:
         for instance in reservation.get("Instances", []):
             return instance["InstanceId"]

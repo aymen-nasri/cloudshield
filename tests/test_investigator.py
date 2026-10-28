@@ -19,17 +19,32 @@ def s1_bundle(pipeline, falco, guardduty, cases):
     return bundle
 
 
-def _answer(bundle, *, evidence_ids=None, target="k8s:pod/shop/checkout-7d9f6c-x2k8p", action="k8s.pod.quarantine_label"):
+def _answer(
+    bundle,
+    *,
+    evidence_ids=None,
+    target="k8s:pod/shop/checkout-7d9f6c-x2k8p",
+    action="k8s.pod.quarantine_label",
+):
     first = sorted(bundle.event_ids)[0]
-    return json.dumps({
-        "synopsis": "Remote script piped to shell in checkout.",
-        "observed_facts": [{"statement": "curl | sh ran", "evidence_ids": evidence_ids or [first]}],
-        "hypotheses": [],
-        "missing_evidence": ["flow logs"],
-        "containment_options": [{"action_type": action, "target_entity_id": target, "rationale": "contain",
-                                 "expected_blast_radius": "one replica", "prerequisites": []}],
-        "confidence_limits": "payload unknown",
-    })
+    return json.dumps(
+        {
+            "synopsis": "Remote script piped to shell in checkout.",
+            "observed_facts": [{"statement": "curl | sh ran", "evidence_ids": evidence_ids or [first]}],
+            "hypotheses": [],
+            "missing_evidence": ["flow logs"],
+            "containment_options": [
+                {
+                    "action_type": action,
+                    "target_entity_id": target,
+                    "rationale": "contain",
+                    "expected_blast_radius": "one replica",
+                    "prerequisites": [],
+                }
+            ],
+            "confidence_limits": "payload unknown",
+        }
+    )
 
 
 class ScriptedModel:
@@ -60,11 +75,14 @@ def test_answer_in_markdown_fence_is_accepted(s1_bundle):
     assert parse_and_validate(f"```json\n{_answer(s1_bundle)}\n```", s1_bundle)
 
 
-@pytest.mark.parametrize("kwargs, problem", [
-    ({"evidence_ids": ["evt_INVENTED"]}, "unknown evidence"),
-    ({"target": "k8s:pod/kube-system/coredns"}, "unknown entity"),
-    ({"action": "shell.exec"}, "schema"),
-])
+@pytest.mark.parametrize(
+    "kwargs, problem",
+    [
+        ({"evidence_ids": ["evt_INVENTED"]}, "unknown evidence"),
+        ({"target": "k8s:pod/kube-system/coredns"}, "unknown entity"),
+        ({"action": "shell.exec"}, "schema"),
+    ],
+)
 def test_ungrounded_or_unsafe_answers_are_rejected(s1_bundle, kwargs, problem):
     with pytest.raises(InvestigationRejected) as exc:
         parse_and_validate(_answer(s1_bundle, **kwargs), s1_bundle)

@@ -32,18 +32,29 @@ def test_deleting_a_record_is_detected():
 
 def test_happy_path_transitions():
     s = ProposalState.DRAFT
-    for nxt in ["evidence_collected", "proposed", "risk_checked", "awaiting_approval",
-                "approved", "executing", "verified", "closed"]:
+    for nxt in [
+        "evidence_collected",
+        "proposed",
+        "risk_checked",
+        "awaiting_approval",
+        "approved",
+        "executing",
+        "verified",
+        "closed",
+    ]:
         s = transition(s, ProposalState(nxt))
     assert s is ProposalState.CLOSED
 
 
-@pytest.mark.parametrize("current, new", [
-    (ProposalState.PROPOSED, ProposalState.EXECUTING),           # skipping policy and approval
-    (ProposalState.AWAITING_APPROVAL, ProposalState.EXECUTING),  # skipping approval
-    (ProposalState.REJECTED, ProposalState.APPROVED),
-    (ProposalState.CLOSED, ProposalState.EXECUTING),
-])
+@pytest.mark.parametrize(
+    "current, new",
+    [
+        (ProposalState.PROPOSED, ProposalState.EXECUTING),  # skipping policy and approval
+        (ProposalState.AWAITING_APPROVAL, ProposalState.EXECUTING),  # skipping approval
+        (ProposalState.REJECTED, ProposalState.APPROVED),
+        (ProposalState.CLOSED, ProposalState.EXECUTING),
+    ],
+)
 def test_unsafe_transitions_are_refused(current, new):
     with pytest.raises(InvalidTransition):
         transition(current, new)

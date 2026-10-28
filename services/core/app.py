@@ -65,8 +65,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "service",
             "correlation-engine",
             "case.event_linked",
-            {"case_id": case.case_id, "event_id": event.event_id, "rule": link.rule,
-             "rationale": link.rationale},
+            {
+                "case_id": case.case_id,
+                "event_id": event.event_id,
+                "rule": link.rule,
+                "rationale": link.rationale,
+            },
         )
 
     pipeline = IngestPipeline(InMemoryEventStore(), evidence, on_accepted=on_accepted)
