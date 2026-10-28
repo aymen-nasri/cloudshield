@@ -30,6 +30,35 @@ with grounded AI investigations and response actions that cannot bypass policy o
 
 ---
 
+## At a glance
+
+| | |
+|---|---|
+| **What it does** | Turns AWS, Kubernetes and Linux security alerts into one evidence-backed case, then lets a containment action run only after a policy check and a named human approval, and verifies the result |
+| **Built with** | Python · FastAPI · Pydantic · PostgreSQL · OCSF · Falco · GuardDuty · Amazon Bedrock · Kubernetes · OpenTofu · Helm · Kyverno · GitHub Actions |
+| **Evidence it works** | 100+ automated tests in CI (including PostgreSQL and policy-bypass tests), infrastructure validated in CI with OpenTofu, Helm, kubeconform and Kyverno, and the replayable demo below |
+| **Status** | The detect → case → approve → contain → verify loop works in code. Lab cluster and AWS deployment are in progress (see [Roadmap](#roadmap)) |
+
+### See it run
+
+`python scripts/demo.py` replays scenario S1 through the real API: CloudShield's ingestion, enrichment, correlation, policy gate, approvals, execution and audit code all run for real; only the Kubernetes API and AWS lookups are simulated.
+
+<p align="center"><img src="docs/demo.svg" alt="Terminal output of scripts/demo.py: two alerts become one case, a quarantine is proposed, two unsafe approvals are refused, the approved action runs once and is verified, and the audit chain is intact" width="820"/></p>
+
+### Where to look in the code
+
+| If you want to see… | Start here |
+|---|---|
+| The response workflow and its safety checks | [`services/response/service.py`](services/response/service.py) |
+| How the policy gate decides | [`services/policy/engine.py`](services/policy/engine.py), [`actions.yaml`](services/policy/policies/actions.yaml) |
+| How AI output is kept grounded | [`services/investigator/validate.py`](services/investigator/validate.py), [`bundle.py`](services/investigator/bundle.py) |
+| Alert normalization to OCSF | [`services/ingestion/adapters/`](services/ingestion/adapters) |
+| Tests that try to bypass approvals | [`tests/test_response_flow.py`](tests/test_response_flow.py) |
+| The quarantine design and why | [ADR 0002](docs/adr/0002-quarantine-via-label.md), [Kyverno test](infra/policies/kyverno/tests/require-quarantine-exclusion/kyverno-test.yaml) |
+| AWS lab infrastructure | [`infra/tofu/envs/lab/`](infra/tofu/envs/lab) |
+
+---
+
 ## Table of contents
 
 1. [What CloudShield is](#what-cloudshield-is)
