@@ -1,0 +1,53 @@
+{
+  "version": "0",
+  "id": "c2f9e7a1-5b3d-4e8f-a6c0-9d1b2e3f4a5b",
+  "detail-type": "GuardDuty Finding",
+  "source": "aws.guardduty",
+  "account": "123456789012",
+  "time": "2026-10-28T14:03:20Z",
+  "region": "eu-west-1",
+  "resources": [],
+  "detail": {
+    "schemaVersion": "2.0",
+    "accountId": "123456789012",
+    "region": "eu-west-1",
+    "id": "a4c8e2f16b9d3a7e5c1f0b8d2e6a4c9f",
+    "type": "Execution:Runtime/NewBinaryExecuted",
+    "title": "A newly created or recently modified binary file has been executed in a container.",
+    "severity": 5.0,
+    "createdAt": "2026-10-28T14:03:12.000Z",
+    "updatedAt": "2026-10-28T14:03:12.000Z",
+    "resource": {
+      "resourceType": "EKSCluster",
+      "eksClusterDetails": {
+        "name": "cs-lab-eks",
+        "arn": "arn:aws:eks:eu-west-1:123456789012:cluster/cs-lab-eks"
+      },
+      "kubernetesDetails": {
+        "kubernetesWorkloadDetails": {
+          "name": "checkout-7d9f6c-x2k8p",
+          "type": "pods",
+          "uid": "8b0e3c52-1d7a-4f43-9e6b-3a2c5d9f0e17",
+          "namespace": "shop"
+        }
+      },
+      "instanceDetails": {
+        "instanceId": "i-0a1b2c3d4e5f60718"
+      }
+    },
+    "service": {
+      "serviceName": "guardduty",
+      "featureName": "RuntimeMonitoring",
+      "eventFirstSeen": "2026-10-28T14:03:05.000Z",
+      "eventLastSeen": "2026-10-28T14:03:05.000Z",
+      "count": 1,
+      "runtimeDetails": {
+        "process": {
+          "name": "x",
+          "executablePath": "/tmp/x",
+          "pid": 4312
+        }
+      }
+    }
+  }
+}

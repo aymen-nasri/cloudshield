@@ -1,0 +1,22 @@
+image:
+  repository: cloudshield/core
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+cluster: cs-lab-eks
+accountId: ""
+
+# Existing Secret holding CLOUDSHIELD_FALCO_TOKEN and CLOUDSHIELD_WAZUH_HMAC_SECRET.
+# Created from AWS Secrets Manager by the External Secrets Operator in the AWS lab.
+credentialsSecret: cloudshield-ingest-credentials
+
+serviceAccountName: cloudshield-investigator
+
+service:
+  port: 80
+
+resources:
+  requests: { cpu: 50m, memory: 128Mi }
+  limits: { cpu: 500m, memory: 512Mi }

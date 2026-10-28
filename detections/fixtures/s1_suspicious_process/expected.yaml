@@ -1,0 +1,17 @@
+scenario: S1
+title: Suspicious process in a pod
+description: >
+  Falco flags an unexpected shell running a piped remote script in shop/checkout; GuardDuty
+  Runtime Monitoring independently reports a new binary executed in the same pod.
+replay_order: [guardduty_finding.json, falco_alert.json]  # deliberately out of order (test T-03)
+expect:
+  cases: 1
+  timeline_sources: [falco, guardduty]  # ordered by event time, not arrival
+  links:
+    - { source: guardduty, rule: C-00 }
+    - { source: falco, rule: C-01 }
+  severity: medium
+required_evidence:
+  - the Falco alert with proc.cmdline
+  - the GuardDuty finding for the same pod UID
+  - pod -> deployment -> service account -> IAM role context (enrichment)

@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# Infrastructure state and secrets never belong in git
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+!*.tfvars.example
+.env
+kubeconfig*
+
+# Local evidence written by the dev stack, and eval run outputs
+.local-evidence/
+evals/results/

