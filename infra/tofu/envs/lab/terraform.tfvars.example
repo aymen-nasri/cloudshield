@@ -1,0 +1,5 @@
+region             = "eu-west-1"
+cluster_name       = "cs-lab-eks"
+monthly_budget_usd = 50
+budget_alert_email = "you@example.com"
+github_repository  = "aymen-nasri/cloudshield"

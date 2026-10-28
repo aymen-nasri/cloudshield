@@ -1,0 +1,157 @@
+{
+  "$defs": {
+    "ContainmentOption": {
+      "properties": {
+        "action_type": {
+          "enum": [
+            "k8s.pod.quarantine_label",
+            "notify.slack",
+            "case.escalate"
+          ],
+          "title": "Action Type",
+          "type": "string"
+        },
+        "expected_blast_radius": {
+          "title": "Expected Blast Radius",
+          "type": "string"
+        },
+        "prerequisites": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Prerequisites",
+          "type": "array"
+        },
+        "rationale": {
+          "title": "Rationale",
+          "type": "string"
+        },
+        "target_entity_id": {
+          "title": "Target Entity Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_type",
+        "target_entity_id",
+        "rationale",
+        "expected_blast_radius"
+      ],
+      "title": "ContainmentOption",
+      "type": "object"
+    },
+    "Fact": {
+      "properties": {
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "statement": {
+          "title": "Statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "statement",
+        "evidence_ids"
+      ],
+      "title": "Fact",
+      "type": "object"
+    },
+    "Hypothesis": {
+      "properties": {
+        "confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "contradicting_evidence": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Contradicting Evidence",
+          "type": "array"
+        },
+        "statement": {
+          "title": "Statement",
+          "type": "string"
+        },
+        "supporting_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Supporting Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "statement",
+        "confidence",
+        "supporting_evidence"
+      ],
+      "title": "Hypothesis",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/aymen-nasri/cloudshield/schemas/Investigation",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "confidence_limits": {
+      "title": "Confidence Limits",
+      "type": "string"
+    },
+    "containment_options": {
+      "items": {
+        "$ref": "#/$defs/ContainmentOption"
+      },
+      "title": "Containment Options",
+      "type": "array"
+    },
+    "hypotheses": {
+      "items": {
+        "$ref": "#/$defs/Hypothesis"
+      },
+      "title": "Hypotheses",
+      "type": "array"
+    },
+    "missing_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Missing Evidence",
+      "type": "array"
+    },
+    "observed_facts": {
+      "items": {
+        "$ref": "#/$defs/Fact"
+      },
+      "title": "Observed Facts",
+      "type": "array"
+    },
+    "synopsis": {
+      "maxLength": 600,
+      "title": "Synopsis",
+      "type": "string"
+    }
+  },
+  "required": [
+    "synopsis",
+    "observed_facts",
+    "hypotheses",
+    "missing_evidence",
+    "containment_options",
+    "confidence_limits"
+  ],
+  "title": "Investigation",
+  "type": "object"
+}
