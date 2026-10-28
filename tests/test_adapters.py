@@ -27,7 +27,8 @@ def test_falco_alert_is_normalized_with_pod_context(falco):
     assert event.source_event_id == "6f1c2a9e-4b7d-4d1e-9a51-2c0e7f3b8a10"
     assert event.resource_id == "k8s:pod/shop/checkout-7d9f6c-x2k8p"
     assert (event.cluster, event.account_id) == (CLUSTER, ACCOUNT)
-    assert event.keys.pod_uid == S1_POD_UID
+    ids = event.keys
+    assert ids.pod_uid == S1_POD_UID
     assert event.severity.normalized is Severity.MEDIUM
     assert event.severity.original == "Warning"
     assert event.event_type == "process.unexpected_execution"
@@ -46,8 +47,9 @@ def test_guardduty_finding_maps_pod_uid_and_scope(guardduty):
 
     assert event.cluster == CLUSTER
     assert event.account_id == ACCOUNT
-    assert event.keys.pod_uid == S1_POD_UID
-    assert event.keys.instance_id == S1_NODE_INSTANCE
+    ids = event.keys
+    assert ids.pod_uid == S1_POD_UID
+    assert ids.instance_id == S1_NODE_INSTANCE
     assert event.event_type == "guardduty.Execution:Runtime/NewBinaryExecuted"
     assert event.severity.normalized is Severity.MEDIUM
 
@@ -77,7 +79,8 @@ def test_wazuh_alert_uses_agent_instance_label():
         }
     ).encode()
     event = _event(WazuhAdapter(account_id=ACCOUNT), raw)
-    assert event.keys.instance_id == WEB01_INSTANCE
+    ids = event.keys
+    assert ids.instance_id == WEB01_INSTANCE
     assert event.severity.normalized is Severity.MEDIUM
     assert event.event_time == parse_time("2026-10-28T14:05:00Z")
 
