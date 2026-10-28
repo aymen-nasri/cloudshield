@@ -10,7 +10,9 @@ from tests.conftest import ACCOUNT, CLUSTER, NOW, fixture_bytes
 
 def _event(adapter, raw: bytes):
     payload = adapter.parse(raw)
-    return adapter.to_event(payload, event_id="evt_x", ingest_time=NOW, raw_uri="mem://x", checksum="sha256:x")
+    return adapter.to_event(
+        payload, event_id="evt_x", ingest_time=NOW, raw_uri="mem://x", checksum="sha256:x"
+    )
 
 
 def test_falco_alert_is_normalized_with_pod_context(falco):
@@ -45,8 +47,10 @@ def test_guardduty_finding_maps_pod_uid_and_scope(guardduty):
     assert event.severity.normalized is Severity.MEDIUM
 
 
-@pytest.mark.parametrize("score, expected", [(2.0, Severity.LOW), (5.0, Severity.MEDIUM),
-                                             (8.0, Severity.HIGH), (9.5, Severity.CRITICAL)])
+@pytest.mark.parametrize(
+    "score, expected",
+    [(2.0, Severity.LOW), (5.0, Severity.MEDIUM), (8.0, Severity.HIGH), (9.5, Severity.CRITICAL)],
+)
 def test_guardduty_severity_bands(guardduty, score, expected):
     raw = json.loads(fixture_bytes("s1_suspicious_process", "guardduty_finding.json"))
     raw["detail"]["severity"] = score
@@ -54,13 +58,19 @@ def test_guardduty_severity_bands(guardduty, score, expected):
 
 
 def test_wazuh_alert_uses_agent_instance_label():
-    raw = json.dumps({
-        "id": "1730124300.88412",
-        "timestamp": "2026-10-28T14:05:00.000+0000",
-        "rule": {"id": "5712", "level": 10, "description": "sshd: brute force trying to get access",
-                 "mitre": {"id": ["T1110"]}},
-        "agent": {"id": "003", "name": "web-01", "labels": {"aws.instance_id": "i-0f1e2d3c4b5a69788"}},
-    }).encode()
+    raw = json.dumps(
+        {
+            "id": "1730124300.88412",
+            "timestamp": "2026-10-28T14:05:00.000+0000",
+            "rule": {
+                "id": "5712",
+                "level": 10,
+                "description": "sshd: brute force trying to get access",
+                "mitre": {"id": ["T1110"]},
+            },
+            "agent": {"id": "003", "name": "web-01", "labels": {"aws.instance_id": "i-0f1e2d3c4b5a69788"}},
+        }
+    ).encode()
     event = _event(WazuhAdapter(account_id=ACCOUNT), raw)
     assert event.keys.instance_id == "i-0f1e2d3c4b5a69788"
     assert event.severity.normalized is Severity.MEDIUM

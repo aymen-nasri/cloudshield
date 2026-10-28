@@ -90,9 +90,9 @@ def test_valid_approval_returns_idempotency_key(engine):
 @pytest.mark.parametrize(
     "approval_overrides, now_offset",
     [
-        ({}, timedelta(minutes=16)),                                  # T-07: expired
-        ({"decision": "reject"}, timedelta(minutes=1)),               # T-07: rejected
-        ({"bound_hash": "sha256:old"}, timedelta(minutes=1)),         # approved another version
+        ({}, timedelta(minutes=16)),  # T-07: expired
+        ({"decision": "reject"}, timedelta(minutes=1)),  # T-07: rejected
+        ({"bound_hash": "sha256:old"}, timedelta(minutes=1)),  # approved another version
         ({"approver": "ai-response-advisor"}, timedelta(minutes=1)),  # self-approval
         ({"approver_roles": frozenset({"viewer"})}, timedelta(minutes=1)),
     ],

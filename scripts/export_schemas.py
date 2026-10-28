@@ -1,7 +1,7 @@
 """Regenerate /schemas from the Pydantic models. CI fails if the committed files are stale.
 
-    python scripts/export_schemas.py          # write
-    python scripts/export_schemas.py --check  # verify only
+python scripts/export_schemas.py          # write
+python scripts/export_schemas.py --check  # verify only
 """
 
 import argparse

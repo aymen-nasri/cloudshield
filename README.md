@@ -391,20 +391,20 @@ flowchart LR
 
 ```python
 def ingest(self, raw: bytes, adapter: SourceAdapter) -> IngestResult:
-    payload = adapter.parse(raw)                      # size limit, JSON object, required fields
+    payload = adapter.parse(raw)  # size limit, JSON object, required fields
     key = dedup_key(adapter.name, adapter.source_event_id(payload))
     if self.events.exists(key):
         return IngestResult("duplicate", key)
 
     now = self.clock()
-    uri, checksum = self.evidence.archive(adapter.name, raw, now)   # S3: SSE-KMS, versioned, Object Lock
+    uri, checksum = self.evidence.archive(adapter.name, raw, now)  # S3: SSE-KMS, versioned, Object Lock
     event = adapter.to_event(payload, event_id=new_id("evt"), ingest_time=now, raw_uri=uri, checksum=checksum)
     try:
-        self.events.insert(event, key)                # unique constraint is the second line of defense
+        self.events.insert(event, key)  # unique constraint is the second line of defense
     except DuplicateEventError:
         return IngestResult("duplicate", key)
     if self.on_accepted:
-        self.on_accepted(event)                       # correlation
+        self.on_accepted(event)  # correlation
     return IngestResult("accepted", key, event.event_id)
 ```
 
@@ -737,7 +737,8 @@ The graph lives in **PostgreSQL** tables (entities plus typed edges). A dedicate
 ```python
 class Fact(BaseModel):
     statement: str
-    evidence_ids: list[str] = Field(min_length=1)    # every fact must cite at least one event
+    evidence_ids: list[str] = Field(min_length=1)  # every fact must cite at least one event
+
 
 class Hypothesis(BaseModel):
     statement: str
@@ -745,12 +746,14 @@ class Hypothesis(BaseModel):
     supporting_evidence: list[str]
     contradicting_evidence: list[str] = []
 
+
 class ContainmentOption(BaseModel):
     action_type: Literal["k8s.pod.quarantine_label", "notify.slack", "case.escalate"]  # closed vocabulary
     target_entity_id: str
     rationale: str
     expected_blast_radius: str
     prerequisites: list[str]
+
 
 class Investigation(BaseModel):
     synopsis: str = Field(max_length=600)

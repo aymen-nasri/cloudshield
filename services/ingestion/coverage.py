@@ -8,9 +8,7 @@ from common.timeutil import utcnow
 
 
 class CoverageTracker:
-    def __init__(
-        self, expected: dict[str, timedelta], clock: Callable[[], datetime] = utcnow
-    ) -> None:
+    def __init__(self, expected: dict[str, timedelta], clock: Callable[[], datetime] = utcnow) -> None:
         self.expected = expected
         self.clock = clock
         self.last_seen: dict[str, datetime] = {}

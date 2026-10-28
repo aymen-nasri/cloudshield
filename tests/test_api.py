@@ -16,7 +16,10 @@ def _client() -> TestClient:
     settings = Settings(
         cluster="cs-lab-eks",
         account_id="123456789012",
-        credentials={"falco": SourceCredential(token=TOKEN), "guardduty": SourceCredential(hmac_secret=SECRET)},
+        credentials={
+            "falco": SourceCredential(token=TOKEN),
+            "guardduty": SourceCredential(hmac_secret=SECRET),
+        },
         max_silence={"falco": timedelta(minutes=5), "wazuh": timedelta(minutes=5)},
     )
     return TestClient(create_app(settings))
@@ -27,11 +30,17 @@ def test_ingest_requires_authentication():
     body = fixture_bytes("s1_suspicious_process", "falco_alert.json")
 
     assert client.post("/v1/ingest/falco", content=body).status_code == 401
-    assert client.post("/v1/ingest/falco", content=body,
-                       headers={"authorization": "Bearer wrong"}).status_code == 401
+    assert (
+        client.post("/v1/ingest/falco", content=body, headers={"authorization": "Bearer wrong"}).status_code
+        == 401
+    )
     # Wazuh has no credential configured, so it is rejected even with a token.
-    assert client.post("/v1/ingest/wazuh", content=body,
-                       headers={"authorization": f"Bearer {TOKEN}"}).status_code == 401
+    assert (
+        client.post(
+            "/v1/ingest/wazuh", content=body, headers={"authorization": f"Bearer {TOKEN}"}
+        ).status_code
+        == 401
+    )
 
 
 def test_end_to_end_replay_builds_a_case_and_audit_trail():
@@ -55,8 +64,12 @@ def test_end_to_end_replay_builds_a_case_and_audit_trail():
 
 def test_malformed_payload_returns_422():
     client = _client()
-    assert client.post("/v1/ingest/falco", content=b"{}",
-                       headers={"authorization": f"Bearer {TOKEN}"}).status_code == 422
+    assert (
+        client.post(
+            "/v1/ingest/falco", content=b"{}", headers={"authorization": f"Bearer {TOKEN}"}
+        ).status_code
+        == 422
+    )
 
 
 def test_t04_silent_sensor_is_reported_as_not_ok():

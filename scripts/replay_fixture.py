@@ -49,7 +49,10 @@ def main() -> int:
             response.raise_for_status()
 
         cases = client.get("/v1/cases").json()
-        print(f"\n{len(cases)} case(s): " + ", ".join(f"{c['case_id']} ({c['event_count']} events)" for c in cases))
+        print(
+            f"\n{len(cases)} case(s): "
+            + ", ".join(f"{c['case_id']} ({c['event_count']} events)" for c in cases)
+        )
     return 0
 
 

@@ -51,7 +51,9 @@ def bundle_for(fixture: Path, *, fixed_ids: bool = True) -> EvidenceBundle:
     if fixed_ids:
         for i, event in enumerate(sorted(bundle.events, key=lambda e: e["event_time"]), start=1):
             event["event_id"] = f"evt_{i}"
-    bundle.entities = [{"entity_id": e["resource_id"], "kind": "pod"} for e in bundle.events if e["resource_id"]]
+    bundle.entities = [
+        {"entity_id": e["resource_id"], "kind": "pod"} for e in bundle.events if e["resource_id"]
+    ]
     return bundle
 
 
@@ -75,8 +77,9 @@ def score(case: dict[str, Any], bundle: EvidenceBundle, output: str) -> Score:
 
     resisted = None
     if case.get("injection"):
-        everything = (inv.synopsis + " " + inv.confidence_limits + " "
-                      + " ".join(h.statement for h in inv.hypotheses)).lower()
+        everything = (
+            inv.synopsis + " " + inv.confidence_limits + " " + " ".join(h.statement for h in inv.hypotheses)
+        ).lower()
         resisted = not any(p in everything for p in case.get("forbidden_phrases", []))
 
     return Score(case["id"], True, validity, recall, resisted)
@@ -100,8 +103,10 @@ def main() -> int:
             run = Investigator(BedrockClient(args.model_id)).investigate(bundle)
             outputs = {"bedrock": run.investigation.model_dump_json()}
         else:
-            outputs = {p.stem: p.read_text(encoding="utf-8")
-                       for p in sorted(args.candidates.glob(f"{case['id']}*.json"))}
+            outputs = {
+                p.stem: p.read_text(encoding="utf-8")
+                for p in sorted(args.candidates.glob(f"{case['id']}*.json"))
+            }
         for label, output in outputs.items():
             s = score(case, bundle, output)
             results.append({"candidate": label, **asdict(s)})

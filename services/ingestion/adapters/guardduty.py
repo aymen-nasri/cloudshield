@@ -100,8 +100,16 @@ class GuardDutyAdapter:
                 "activity_id": 1,
                 "severity_id": OCSF_SEVERITY_ID[severity],
                 "time": int(event_time.timestamp() * 1000),
-                "finding_info": {"uid": detail["id"], "title": detail.get("title"), "types": [detail["type"]]},
-                "cloud": {"provider": "AWS", "account": {"uid": payload["account"]}, "region": payload.get("region")},
+                "finding_info": {
+                    "uid": detail["id"],
+                    "title": detail.get("title"),
+                    "types": [detail["type"]],
+                },
+                "cloud": {
+                    "provider": "AWS",
+                    "account": {"uid": payload["account"]},
+                    "region": payload.get("region"),
+                },
                 "metadata": {
                     "version": "1.3.0",
                     "product": {"name": "GuardDuty", "vendor_name": "AWS"},
