@@ -100,6 +100,38 @@ def verify_quarantine(api: PodApi, target: Target) -> VerificationReport:
     return report
 
 
+def verify_release(api: PodApi, target: Target) -> VerificationReport:
+    """After rollback: the label is gone, so the pod's normal allow-policies apply again."""
+    report = VerificationReport()
+    pod, problem = _check_target(api, target)
+    if problem or pod is None or target.namespace is None:
+        report.checks["target_exists"] = False
+        report.notes["target_exists"] = problem.detail if problem else "missing"
+        return report
+    labels = pod["metadata"].get("labels") or {}
+    report.checks["label_removed"] = QUARANTINE_LABEL not in labels
+    selecting = allow_policies_selecting(api.list_network_policies(target.namespace), labels)
+    report.checks["allow_policies_apply_again"] = bool(selecting)
+    report.notes["allow_policies_apply_again"] = f"selected by {selecting}" if selecting else "none"
+    return report
+
+
+def preview_quarantine(api: PodApi, target: Target) -> dict[str, Any]:
+    """What the analyst should know before approving: which allowed paths this pod will lose."""
+    pod, problem = _check_target(api, target)
+    if problem or pod is None or target.namespace is None:
+        return {"error": problem.detail if problem else "missing"}
+    labels = pod["metadata"].get("labels") or {}
+    policies = api.list_network_policies(target.namespace)
+    return {
+        "pod_phase": (pod.get("status") or {}).get("phase"),
+        "allow_policies_lost": allow_policies_selecting(policies, labels),
+        "default_deny_present": any(is_default_deny(p) for p in policies),
+        "pod_keeps_running": True,
+        "caveat": "Whether already-open connections are cut depends on the CNI.",
+    }
+
+
 class KubernetesPodApi:
     """PodApi backed by the official Kubernetes client (in-cluster config, responder service account)."""
 

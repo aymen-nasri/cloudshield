@@ -12,10 +12,15 @@ from psycopg.types.json import Jsonb
 
 from cases.audit import GENESIS_HASH, ActorType, AuditRecord, format_ts, make_record, verify_chain
 from cases.models import Case, CaseLink
-from common.models import CorrelationKeys, NormalizedEvent, SeverityInfo
+from cases.state import ProposalState
+from common.ids import new_id
+from common.models import CorrelationKeys, NormalizedEvent, ResponseProposal, SeverityInfo, Target
 from common.timeutil import utcnow
 from enrichment.graph import Edge, Entity
 from ingestion.pipeline import DuplicateEventError
+from policy.approvals import Approval
+from policy.engine import PolicyResult
+from response.records import AlreadyExecuted, DuplicateApproval, Execution, ProposalRecord
 from storage.database import Database
 
 _AUDIT_LOCK = 0x0C1D5E1A
@@ -306,3 +311,185 @@ class PostgresAuditLog:
 
     def verify(self) -> int | None:
         return verify_chain(self.records())
+
+
+class PostgresProposalStore:
+    """Proposals, approvals and executions. UNIQUE (proposal_id, approver) and UNIQUE
+    execution.proposal_id make "one decision per approver" and "execute at most once" hold even
+    across concurrent requests."""
+
+    def __init__(self, db: Database) -> None:
+        self.db = db
+
+    def insert(self, record: ProposalRecord) -> None:
+        p = record.proposal
+        with self.db.pool.connection() as conn:
+            conn.execute(
+                "INSERT INTO response_proposal (id, incident_id, action_type, action_class, target,"
+                " environment, impact_preview, proposal_hash, idempotency_key, state, expires_at,"
+                " created_at, requested_by, rationale, parameters, dry_run_passed, policy)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    p.proposal_id,
+                    p.case_id,
+                    p.action_type,
+                    record.action_class,
+                    Jsonb(p.target.model_dump(mode="json")),
+                    p.environment,
+                    Jsonb(p.impact_preview),
+                    record.proposal_hash,
+                    record.proposal_hash,
+                    record.state.value,
+                    record.expires_at,
+                    p.created_at,
+                    p.requested_by,
+                    p.rationale,
+                    Jsonb(p.parameters),
+                    p.dry_run_passed,
+                    Jsonb(record.policy.to_dict()) if record.policy else None,
+                ),
+            )
+
+    def update(self, record: ProposalRecord) -> None:
+        p = record.proposal
+        with self.db.pool.connection() as conn:
+            conn.execute(
+                "UPDATE response_proposal SET state = %s, dry_run_passed = %s, impact_preview = %s,"
+                " policy = %s WHERE id = %s",
+                (
+                    record.state.value,
+                    p.dry_run_passed,
+                    Jsonb(p.impact_preview),
+                    Jsonb(record.policy.to_dict()) if record.policy else None,
+                    p.proposal_id,
+                ),
+            )
+
+    def add_approval(self, approval: Approval) -> None:
+        try:
+            with self.db.pool.connection() as conn:
+                conn.execute(
+                    "INSERT INTO approval (id, proposal_id, approver, approver_roles, decision,"
+                    " justification, bound_hash, decided_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        new_id("apr"),
+                        approval.proposal_id,
+                        approval.approver,
+                        sorted(approval.approver_roles),
+                        approval.decision,
+                        approval.justification,
+                        approval.bound_hash,
+                        approval.decided_at,
+                    ),
+                )
+        except errors.UniqueViolation as exc:
+            raise DuplicateApproval(approval.approver) from exc
+
+    def start_execution(self, proposal_id: str, execution: Execution) -> None:
+        try:
+            with self.db.pool.connection() as conn:
+                conn.execute(
+                    "INSERT INTO execution (id, proposal_id, executor_identity, status, started_at)"
+                    " VALUES (%s, %s, %s, %s, %s)",
+                    (
+                        execution.execution_id,
+                        proposal_id,
+                        execution.executor_identity,
+                        execution.status,
+                        execution.started_at,
+                    ),
+                )
+        except errors.UniqueViolation as exc:
+            raise AlreadyExecuted(proposal_id) from exc
+
+    def finish_execution(self, proposal_id: str, execution: Execution) -> None:
+        with self.db.pool.connection() as conn:
+            conn.execute(
+                "UPDATE execution SET status = %s, result = %s, finished_at = %s WHERE id = %s",
+                (execution.status, Jsonb(execution.result), execution.finished_at, execution.execution_id),
+            )
+            for name, passed in execution.checks.items():
+                conn.execute(
+                    "INSERT INTO verification (id, execution_id, check_name, passed, note)"
+                    " VALUES (%s, %s, %s, %s, %s)",
+                    (new_id("ver"), execution.execution_id, name, passed, execution.notes.get(name)),
+                )
+
+    def _load(self, where: str, param: str) -> list[ProposalRecord]:
+        with self.db.pool.connection() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM response_proposal WHERE {where} ORDER BY created_at",  # noqa: S608 - fixed clauses
+                (param,),
+            ).fetchall()
+            if not rows:
+                return []
+            ids = [r["id"] for r in rows]
+            approvals = conn.execute(
+                "SELECT * FROM approval WHERE proposal_id = ANY(%s) ORDER BY decided_at", (ids,)
+            ).fetchall()
+            executions = conn.execute(
+                "SELECT * FROM execution WHERE proposal_id = ANY(%s)", (ids,)
+            ).fetchall()
+            checks = conn.execute(
+                "SELECT v.* FROM verification v JOIN execution x ON x.id = v.execution_id"
+                " WHERE x.proposal_id = ANY(%s) ORDER BY v.check_name",
+                (ids,),
+            ).fetchall()
+
+        records = []
+        for r in rows:
+            proposal = ResponseProposal(
+                proposal_id=r["id"],
+                case_id=r["incident_id"],
+                action_type=r["action_type"],
+                target=Target.model_validate(r["target"]),
+                environment=r["environment"],
+                parameters=r["parameters"],
+                rationale=r["rationale"],
+                requested_by=r["requested_by"],
+                created_at=r["created_at"],
+                dry_run_passed=r["dry_run_passed"],
+                impact_preview=r["impact_preview"],
+            )
+            record = ProposalRecord(
+                proposal=proposal,
+                state=ProposalState(r["state"]),
+                action_class=r["action_class"],
+                expires_at=r["expires_at"],
+                policy=PolicyResult.from_dict(r["policy"]) if r["policy"] else None,
+                approvals=[
+                    Approval(
+                        proposal_id=a["proposal_id"],
+                        approver=a["approver"],
+                        approver_roles=frozenset(a["approver_roles"]),
+                        decision=a["decision"],
+                        bound_hash=a["bound_hash"],
+                        decided_at=a["decided_at"],
+                        justification=a["justification"],
+                    )
+                    for a in approvals
+                    if a["proposal_id"] == r["id"]
+                ],
+            )
+            x = next((x for x in executions if x["proposal_id"] == r["id"]), None)
+            if x is not None:
+                mine = [c for c in checks if c["execution_id"] == x["id"]]
+                record.execution = Execution(
+                    execution_id=x["id"],
+                    executor_identity=x["executor_identity"],
+                    started_at=x["started_at"],
+                    status=x["status"],
+                    result=x["result"] or {},
+                    checks={c["check_name"]: c["passed"] for c in mine},
+                    notes={c["check_name"]: c["note"] for c in mine if c["note"]},
+                    finished_at=x["finished_at"],
+                )
+            records.append(record)
+        return records
+
+    def get(self, proposal_id: str) -> ProposalRecord | None:
+        found = self._load("id = %s", proposal_id)
+        return found[0] if found else None
+
+    def list_for_case(self, case_id: str) -> list[ProposalRecord]:
+        return self._load("incident_id = %s", case_id)

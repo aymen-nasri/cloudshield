@@ -829,11 +829,13 @@ stateDiagram-v2
     Draft --> Evidence
     Evidence --> Proposed
     Proposed --> RiskChecked
+    Proposed --> Rejected: proposal expired
     RiskChecked --> Awaiting: policy allows
     RiskChecked --> Rejected: policy denies
     Awaiting --> Approved: named approver
     Awaiting --> Rejected: rejected or TTL expired
     Approved --> Executing
+    Approved --> Rejected: approvals expired or target changed
     Executing --> Verified: post-checks pass
     Executing --> Failed: timeout, denial or stale target
     Verified --> Closed
@@ -997,12 +999,13 @@ COVERAGE   Falco ● ok    GuardDuty ● ok    Wazuh ● degraded (no heartbeat 
 | `POST` | `/v1/proposals/{id}/dry-run` | Re-run the dry-run and the freshness check | `response:propose` |
 | `POST` | `/v1/proposals/{id}/approve` | Approve; the body must include the proposal hash | `response:approve` |
 | `POST` | `/v1/proposals/{id}/reject` | Reject with a justification | `response:approve` |
-| `GET` | `/v1/executions/{id}` | Execution status and verification results | `case:read` |
+| `POST` | `/v1/proposals/{id}/execute` | Re-checks approvals and the target, executes once, verifies | `response:execute` |
+| `GET` | `/v1/cases/{id}/proposals` | Proposals for a case, with policy decisions, approvals and execution results | `case:read` |
 | `GET` | `/v1/cases/{id}/report` | Incident report (Markdown / PDF) | `case:read` |
 | `GET` | `/v1/health/coverage` | Per-source heartbeat and coverage state | `ops:read` |
 | `GET` | `/v1/audit?case_id=` | Hash-chained audit records | `audit:read` |
 
-Console users sign in through OIDC SSO with four roles: `viewer`, `analyst`, `incident-responder` (can approve) and `admin`. Disruptive actions need an approver other than the person who requested them.
+Analysts use four roles: `viewer`, `analyst` (can propose), `incident-responder` (can propose, approve and execute) and `admin`. Nobody can approve their own proposal, approvals must quote the proposal hash they were shown, and execution re-checks both the approvals and the target. Today analysts authenticate with bearer tokens whose SHA-256 hashes are configured in `CLOUDSHIELD_ANALYSTS`; OIDC SSO replaces this later (M5).
 
 ---
 
@@ -1144,15 +1147,17 @@ CloudShield's benefits are claimed only once they have been **measured**. Each K
 
 | ID | Test | Expected behavior | Milestone | Status |
 |---|---|---|---|---|
-| T-01 | **Happy path** | Valid Falco alert → correct case → grounded report → approved action → verification | M4 | ⬜ |
-| T-02 | **Duplicate delivery** | One source event produces exactly one canonical finding and case link | M2 | ⬜ |
-| T-03 | **Out-of-order events** | The timeline is rebuilt by event time, not arrival order | M2 | ⬜ |
-| T-04 | **Sensor outage** | Coverage is marked degraded; CloudShield doesn't report "all clear" | M2 | ⬜ |
-| T-05 | **Ambiguous asset mapping** | The identity stays unresolved and is displayed as such | M2 | ⬜ |
-| T-06 | **Prompt injection in a log** | Malicious instructions stay data and never invoke privileged tools | M3 | ⬜ |
-| T-07 | **Approval denied or expired** | No action occurs | M4 | ⬜ |
-| T-08 | **Execution timeout / partial failure** | Status and manual escalation are visible | M4 | ⬜ |
+| T-01 | **Happy path** | Valid Falco alert → correct case → grounded report → approved action → verification | M4 | 🧪 without the AI report |
+| T-02 | **Duplicate delivery** | One source event produces exactly one canonical finding and case link | M2 | 🧪 |
+| T-03 | **Out-of-order events** | The timeline is rebuilt by event time, not arrival order | M2 | 🧪 |
+| T-04 | **Sensor outage** | Coverage is marked degraded; CloudShield doesn't report "all clear" | M2 | 🧪 |
+| T-05 | **Ambiguous asset mapping** | The identity stays unresolved and is displayed as such | M2 | 🧪 |
+| T-06 | **Prompt injection in a log** | Malicious instructions stay data and never invoke privileged tools | M3 | 🧪 |
+| T-07 | **Approval denied or expired** | No action occurs | M4 | 🧪 |
+| T-08 | **Execution timeout / partial failure** | Status and manual escalation are visible | M4 | 🧪 |
 | T-09 | **High-volume burst** | Queue backpressure and cost limits hold | M5 | ⬜ |
+
+🧪 = covered by automated tests in [`tests/`](tests), with fakes standing in for Kubernetes and AWS · ✅ = also demonstrated on the lab cluster · ⬜ = not yet covered
 
 ---
 
@@ -1165,7 +1170,7 @@ The roadmap is ordered by **learning and risk reduction**, not by the number of 
 | **M1 · Protected lab and repeatable deployment** | Small app on Kubernetes, a Linux host, network baseline, AWS logging and identity, IaC and documentation | Another engineer can reproduce the isolated lab and inspect its topology | Agentic AI, multiple clusters, destructive response | 🟡 In progress |
 | **M2 · Security operations core** | Two source types, OCSF normalization, PostgreSQL + OpenSearch, basic cases and dashboard, simple correlation | A simulated alert can be traced to its raw evidence and correct resource context | Recreating a full SIEM | 🟡 In progress |
 | **M3 · AI investigator (read-only)** | One LLM, runbook corpus, retrieval, bounded evidence packets, structured cited summaries, evaluation fixtures | Grounded summaries on labeled incidents; all negative tests pass | Trusting model-generated commands or exploitability claims | ⬜ Planned |
-| **M4 · Controlled response** | Response state machine, approval, policy gate, one reversible lab action, audit and verification | Detect → investigate → approve → act → verify, end to end | Real production auto-isolation | ⬜ Planned |
+| **M4 · Controlled response** | Response state machine, approval, policy gate, one reversible lab action, audit and verification | Detect → investigate → approve → act → verify, end to end | Real production auto-isolation | 🟡 In progress |
 | **M5 · Cross-layer expansion** | Hubble/Cilium, deeper AWS identity context, network relationship mapping, broader runbooks, scoped multi-step read-only agent | A second, distinct scenario handled with measured improvement | Any tool that doesn't improve a validated workflow | ⬜ Planned |
 
 ### Definition of the MVP
@@ -1296,7 +1301,7 @@ cloudshield/
 
 ## Getting started
 
-> **Status:** the core API, PostgreSQL persistence (events, cases, entity graph, hash-chained audit log), Kubernetes/AWS enrichment, the policy gate, the investigator contract, the responder and the test suite run today. OpenSearch indexing and the analyst console are next (M2). The kind and AWS labs are defined in code and are being brought up as part of M1.
+> **Status:** the core API, PostgreSQL persistence (events, cases, entity graph, hash-chained audit log), Kubernetes/AWS enrichment, the full proposal → approval → execution → verification API, the investigator contract and the test suite run today. OpenSearch indexing and the analyst console are next (M2). The kind and AWS labs are defined in code and are being brought up as part of M1.
 
 **Prerequisites:** Python 3.12+, Docker, Make. For the local lab: kind, kubectl, Helm. For the AWS lab: OpenTofu, the AWS CLI and a dedicated AWS account.
 
