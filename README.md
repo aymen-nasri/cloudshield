@@ -528,7 +528,7 @@ Each link stores the rule that fired, its confidence and a human-readable ration
 | Store | Purpose | Design note |
 |---|---|---|
 | **OCSF** | Common event semantics across tools | A documented subset; source-specific fields kept [[R8]](#references) |
-| **PostgreSQL** | Incidents, state changes, owners, approvals, proposals, workflow state | The transactional source of truth for decisions |
+| **PostgreSQL** | Events, incidents, case links, entity graph, approvals, proposals, audit log | The transactional source of truth. Versioned migrations ([`services/cases/migrations`](services/cases/migrations)) are applied on startup; the same contract tests run against PostgreSQL and the in-memory stores |
 | **OpenSearch** | Event search, enrichment queries, runbook retrieval | Selected fields only; no indiscriminate indexing [[R9]](#references) |
 | **S3** | Raw payload archive, evidence files, report exports | SSE-KMS, versioning, Object Lock, lifecycle retention |
 | **OpenTelemetry** | Metrics, traces and logs from CloudShield's own services | Operates the platform; it is not a threat detector |
@@ -1163,7 +1163,7 @@ The roadmap is ordered by **learning and risk reduction**, not by the number of 
 | Milestone | Build | Exit criterion | Deliberately avoid | Status |
 |---|---|---|---|---|
 | **M1 · Protected lab and repeatable deployment** | Small app on Kubernetes, a Linux host, network baseline, AWS logging and identity, IaC and documentation | Another engineer can reproduce the isolated lab and inspect its topology | Agentic AI, multiple clusters, destructive response | 🟡 In progress |
-| **M2 · Security operations core** | Two source types, OCSF normalization, PostgreSQL + OpenSearch, basic cases and dashboard, simple correlation | A simulated alert can be traced to its raw evidence and correct resource context | Recreating a full SIEM | ⬜ Planned |
+| **M2 · Security operations core** | Two source types, OCSF normalization, PostgreSQL + OpenSearch, basic cases and dashboard, simple correlation | A simulated alert can be traced to its raw evidence and correct resource context | Recreating a full SIEM | 🟡 In progress |
 | **M3 · AI investigator (read-only)** | One LLM, runbook corpus, retrieval, bounded evidence packets, structured cited summaries, evaluation fixtures | Grounded summaries on labeled incidents; all negative tests pass | Trusting model-generated commands or exploitability claims | ⬜ Planned |
 | **M4 · Controlled response** | Response state machine, approval, policy gate, one reversible lab action, audit and verification | Detect → investigate → approve → act → verify, end to end | Real production auto-isolation | ⬜ Planned |
 | **M5 · Cross-layer expansion** | Hubble/Cilium, deeper AWS identity context, network relationship mapping, broader runbooks, scoped multi-step read-only agent | A second, distinct scenario handled with measured improvement | Any tool that doesn't improve a validated workflow | ⬜ Planned |
@@ -1296,26 +1296,33 @@ cloudshield/
 
 ## Getting started
 
-> **Status:** the core API, the policy gate, the investigator contract, the responder and the test suite run today. Cases are held in memory until the PostgreSQL store lands (M2). The kind and AWS labs are defined in code and are being brought up as part of M1.
+> **Status:** the core API, PostgreSQL persistence (events, cases, entity graph, hash-chained audit log), Kubernetes/AWS enrichment, the policy gate, the investigator contract, the responder and the test suite run today. OpenSearch indexing and the analyst console are next (M2). The kind and AWS labs are defined in code and are being brought up as part of M1.
 
 **Prerequisites:** Python 3.12+, Docker, Make. For the local lab: kind, kubectl, Helm. For the AWS lab: OpenTofu, the AWS CLI and a dedicated AWS account.
 
 ```bash
 git clone https://github.com/aymen-nasri/cloudshield.git
 cd cloudshield
-make install         # editable install with dev, AWS and Kubernetes extras
+make install         # editable install with dev, AWS, Kubernetes and PostgreSQL extras
 make check           # ruff, mypy, pytest, schema drift check
 make evals           # score the investigator evaluation candidates
+```
+
+The store contract tests also run against PostgreSQL when a disposable database is available (CI always runs them against a `postgres:16` service):
+
+```bash
+CLOUDSHIELD_TEST_DATABASE_URL=postgresql://user@localhost:5432/cloudshield_test pytest -m postgres
 ```
 
 **Run the core API and replay scenario S1:**
 
 ```bash
 cp .env.example .env # then set real values
-make core-up         # core API, PostgreSQL, OpenSearch (docker compose)
+make core-up         # core API (applies migrations), PostgreSQL, OpenSearch (docker compose)
 set -a; . ./.env; set +a
 make demo-incident   # replays GuardDuty + Falco out of order; both land in one case
 curl localhost:8080/v1/cases
+docker compose restart core && curl localhost:8080/v1/cases   # the case survives a restart
 ```
 
 **Local Kubernetes lab:**

@@ -20,6 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 aws = ["boto3>=1.35"]
 k8s = ["kubernetes>=31.0"]
+postgres = ["psycopg[binary,pool]>=3.2"]
 dev = [
     "httpx>=0.27",
     "mypy>=1.13",
@@ -34,10 +35,12 @@ where = ["services"]
 [tool.setuptools.package-data]
 investigator = ["prompts/*.md"]
 policy = ["policies/*.yaml"]
+cases = ["migrations/*.sql"]
 
 [tool.pytest.ini_options]
 pythonpath = ["services", "."]
 testpaths = ["tests"]
+markers = ["postgres: needs CLOUDSHIELD_TEST_DATABASE_URL (a disposable PostgreSQL database)"]
 
 [tool.ruff]
 line-length = 110

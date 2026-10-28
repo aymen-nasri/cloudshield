@@ -11,11 +11,14 @@ services:
       CLOUDSHIELD_FALCO_TOKEN: ${CLOUDSHIELD_FALCO_TOKEN:?set in .env}
       CLOUDSHIELD_WAZUH_HMAC_SECRET: ${CLOUDSHIELD_WAZUH_HMAC_SECRET:?set in .env}
       CLOUDSHIELD_REPLAY_HMAC_SECRET: ${CLOUDSHIELD_REPLAY_HMAC_SECRET:?set in .env}
+      # The core API applies services/cases/migrations on startup.
+      CLOUDSHIELD_DATABASE_URL: postgresql://cloudshield:${POSTGRES_PASSWORD:?set in .env}@postgres:5432/cloudshield
     volumes:
       - ./.local-evidence:/evidence
-    depends_on: [postgres, opensearch]
+    depends_on:
+      postgres:
+        condition: service_healthy
 
-  # PostgreSQL and OpenSearch are started now so the M2 stores can be developed against them.
   postgres:
     image: postgres:16-alpine
     environment:
@@ -23,9 +26,14 @@ services:
       POSTGRES_USER: cloudshield
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
     volumes:
-      - ./services/cases/migrations:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
     ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "cloudshield"]
+      interval: 5s
+      retries: 10
 
+  # Started for the search work that follows (M2): not used by the core API yet.
   opensearch:
     image: opensearchproject/opensearch:2.18.0
     environment:
@@ -33,3 +41,6 @@ services:
       DISABLE_SECURITY_PLUGIN: "true"   # local only
       OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
     ports: ["9200:9200"]
+
+volumes:
+  pgdata:
