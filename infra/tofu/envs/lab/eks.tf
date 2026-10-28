@@ -8,7 +8,7 @@ module "eks" {
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
 
-  cluster_endpoint_public_access = true
+  cluster_endpoint_public_access           = true
   enable_cluster_creator_admin_permissions = true
 
   # Control-plane audit logs feed the K8s audit evidence source (pods/exec, RBAC changes).
@@ -16,10 +16,11 @@ module "eks" {
 
   cluster_addons = {
     vpc-cni = {
-      most_recent = true
       # Native NetworkPolicy enforcement in the VPC CNI, required for quarantine.
+      most_recent          = true
       configuration_values = jsonencode({ enableNetworkPolicy = "true" })
     }
+
     coredns                = { most_recent = true }
     kube-proxy             = { most_recent = true }
     eks-pod-identity-agent = { most_recent = true }
@@ -55,6 +56,7 @@ resource "aws_iam_role" "investigator" {
 data "aws_iam_policy_document" "investigator" {
   statement {
     sid = "ReadOnlyContext"
+
     actions = [
       "ec2:DescribeInstances",
       "ec2:DescribeSecurityGroups",
@@ -67,6 +69,7 @@ data "aws_iam_policy_document" "investigator" {
       "cloudtrail:LookupEvents",
       "guardduty:GetFindings",
     ]
+
     resources = ["*"]
   }
   statement {

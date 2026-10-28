@@ -41,6 +41,7 @@ resource "aws_sqs_queue" "findings" {
 resource "aws_cloudwatch_event_rule" "guardduty_findings" {
   name        = "cloudshield-guardduty-findings"
   description = "Route GuardDuty findings to CloudShield"
+
   event_pattern = jsonencode({
     source        = ["aws.guardduty"]
     "detail-type" = ["GuardDuty Finding"]

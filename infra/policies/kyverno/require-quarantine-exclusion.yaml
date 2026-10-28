@@ -11,7 +11,6 @@ metadata:
       NetworkPolicies in namespaces labelled cloudshield.io/protected=true must not select
       pods labelled cloudshield.io/quarantine=true.
 spec:
-  validationFailureAction: Audit
   background: true
   rules:
     - name: allow-policies-exclude-quarantined-pods
@@ -27,6 +26,7 @@ spec:
           - resources:
               names: [default-deny-all]
       validate:
+        failureAction: Audit
         message: >-
           Add matchExpressions {key: cloudshield.io/quarantine, operator: NotIn, values: ["true"]}
           to spec.podSelector so quarantined pods fall back to default-deny.

@@ -53,6 +53,65 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Infrastructure is checked without any cloud account: syntax, schemas, policy behavior.
+  infra:
+    name: validate infrastructure
+    runs-on: ubuntu-latest
+    env:
+      TOFU_VERSION: "1.13.1"
+      HELM_VERSION: "v3.22.0"
+      KUBECONFORM_VERSION: "v0.8.0"
+      KYVERNO_VERSION: "v1.19.1"
+      KUBERNETES_VERSION: "1.31.0" # matches cluster_version in infra/tofu/envs/lab/eks.tf
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+      - name: OpenTofu format
+        run: tofu fmt -check -recursive -diff infra/tofu
+      - name: OpenTofu validate (no backend, no AWS credentials)
+        working-directory: infra/tofu/envs/lab
+        run: |
+          tofu init -backend=false -input=false
+          tofu validate
+
+      - uses: azure/setup-helm@v5
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - name: Helm lint and render
+        run: |
+          helm lint --strict infra/helm/cloudshield
+          helm template cloudshield infra/helm/cloudshield --namespace cloudshield > rendered-chart.yaml
+
+      - name: Install kubeconform and the Kyverno CLI
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSfL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" kubeconform
+          curl -sSfL "https://github.com/kyverno/kyverno/releases/download/${KYVERNO_VERSION}/kyverno-cli_${KYVERNO_VERSION}_linux_x86_64.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" kyverno
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Kubernetes manifests match their schemas (core + Kyverno CRDs)
+        run: |
+          kubeconform -strict -summary -kubernetes-version "$KUBERNETES_VERSION" \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            infra/k8s infra/policies/networkpolicies infra/policies/rbac infra/policies/kyverno/*.yaml rendered-chart.yaml
+      - name: Kyverno policy tests (the quarantine guard catches a leaky allow-policy)
+        run: kyverno test infra/policies/kyverno/tests
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Ansible syntax check
+        working-directory: infra/ansible
+        run: |
+          pip install "ansible-core>=2.17,<2.19"
+          ansible-playbook --syntax-check -i inventory.example.ini harden-host.yml wazuh-agent.yml
+
   image:
     name: build and scan image
     runs-on: ubuntu-latest
