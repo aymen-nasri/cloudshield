@@ -5,7 +5,7 @@ CALICO_VERSION := v3.29.1
 .PHONY: install lint typecheck test schemas check lab-up lab-down core-up core-down demo-incident evals
 
 install:
-	$(PYTHON) -m pip install -e ".[dev,aws,k8s]"
+	$(PYTHON) -m pip install -e ".[dev,aws,k8s,postgres]"
 
 lint:
 	ruff check .

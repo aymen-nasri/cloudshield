@@ -5,6 +5,7 @@ event sharing the rule's key within the rule's time window. Cases never span acc
 clusters (C-04). If nothing matches, the event opens a new case (rule C-00).
 """
 
+import threading
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -37,8 +38,15 @@ def same_scope(case: Case, event: NormalizedEvent) -> bool:
 class CorrelationEngine:
     def __init__(self, cases: CaseStore) -> None:
         self.cases = cases
+        # Requests ingest on worker threads; serialize so two related events can't both open a case.
+        # TODO(M5): a PostgreSQL advisory lock when the core API runs with more than one replica.
+        self._lock = threading.Lock()
 
     def correlate(self, event: NormalizedEvent) -> tuple[Case, CaseLink]:
+        with self._lock:
+            return self._correlate(event)
+
+    def _correlate(self, event: NormalizedEvent) -> tuple[Case, CaseLink]:
         for rule in RULES:
             value = getattr(event.keys, rule.key)
             if not value:
