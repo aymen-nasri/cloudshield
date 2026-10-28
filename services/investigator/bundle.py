@@ -68,6 +68,7 @@ def build_bundle(
                     "source": e.source,
                     "event_time": e.event_time.isoformat(),
                     "title": e.title,
+                    "event_type": e.event_type,
                     "severity": e.severity.normalized.value,
                     "resource_id": e.resource_id,
                     "namespace": e.namespace,

@@ -24,11 +24,26 @@ from ingestion.coverage import CoverageTracker
 from ingestion.evidence import EvidenceStore, InMemoryEvidenceStore, LocalEvidenceStore
 from ingestion.pipeline import EventStore, IngestPipeline, InMemoryEventStore
 from ingestion.router import build_router as build_ingestion_router
+from investigator.offline import OfflineBaselineModel
+from investigator.records import InMemoryInvestigationStore, InvestigationStore
+from investigator.router import build_router as build_investigation_router
+from investigator.runbooks import RunbookLibrary
+from investigator.service import LanguageModel
+from investigator.workflow import InvestigationService
 from policy.engine import load_policies
 from responder.executor import Executor, KubernetesExecutor
 from response.records import InMemoryProposalStore, ProposalStore
 from response.router import build_router as build_response_router
 from response.service import ResponseService
+
+
+def _default_runbooks() -> Path | None:
+    """CLOUDSHIELD_RUNBOOKS_DIR, else the repository's runbooks/ when running from a checkout."""
+    configured = os.getenv("CLOUDSHIELD_RUNBOOKS_DIR")
+    if configured:
+        return Path(configured)
+    checkout = Path(__file__).resolve().parents[2] / "runbooks"
+    return checkout if checkout.is_dir() else None
 
 
 @dataclass
@@ -46,6 +61,11 @@ class Settings:
     executor: str | None = None
     # Which policy environment this deployment is ("lab" or "prod"); the allowlist is per environment.
     environment: str = "lab"
+    # "offline" = deterministic baseline (no LLM); "bedrock" = Amazon Bedrock. Unset: investigations off.
+    investigator: str | None = None
+    bedrock_model_id: str | None = None
+    bedrock_guardrail_id: str | None = None
+    runbooks_dir: Path | None = field(default_factory=lambda: _default_runbooks())
     analysts: AnalystDirectory = field(default_factory=lambda: AnalystDirectory({}))
     credentials: dict[str, SourceCredential] = field(default_factory=dict)
     max_silence: dict[str, timedelta] = field(
@@ -73,6 +93,9 @@ class Settings:
             executor=os.getenv("CLOUDSHIELD_EXECUTOR"),
             environment=os.getenv("CLOUDSHIELD_ENVIRONMENT", "lab"),
             analysts=AnalystDirectory.from_json(os.getenv("CLOUDSHIELD_ANALYSTS")),
+            investigator=os.getenv("CLOUDSHIELD_INVESTIGATOR"),
+            bedrock_model_id=os.getenv("CLOUDSHIELD_BEDROCK_MODEL_ID"),
+            bedrock_guardrail_id=os.getenv("CLOUDSHIELD_BEDROCK_GUARDRAIL_ID"),
             credentials=credentials,
         )
 
@@ -84,6 +107,7 @@ class Stores:
     entities: EntityStore
     audit: AuditStore
     proposals: ProposalStore
+    investigations: InvestigationStore
     close: Callable[[], None] = lambda: None
 
 
@@ -95,6 +119,7 @@ def build_stores(settings: Settings) -> Stores:
             InMemoryEntityStore(),
             AuditLog(),
             InMemoryProposalStore(),
+            InMemoryInvestigationStore(),
         )
 
     from storage.database import Database, apply_migrations
@@ -103,6 +128,7 @@ def build_stores(settings: Settings) -> Stores:
         PostgresCaseStore,
         PostgresEntityStore,
         PostgresEventStore,
+        PostgresInvestigationStore,
         PostgresProposalStore,
     )
 
@@ -114,8 +140,23 @@ def build_stores(settings: Settings) -> Stores:
         PostgresEntityStore(db),
         PostgresAuditLog(db),
         PostgresProposalStore(db),
+        PostgresInvestigationStore(db),
         close=db.close,
     )
+
+
+def build_model(settings: Settings) -> LanguageModel | None:
+    if settings.investigator == "offline":
+        return OfflineBaselineModel()
+    if settings.investigator == "bedrock":
+        if not settings.bedrock_model_id:
+            raise ValueError("CLOUDSHIELD_INVESTIGATOR=bedrock needs CLOUDSHIELD_BEDROCK_MODEL_ID")
+        from investigator.bedrock import BedrockClient
+
+        return BedrockClient(
+            settings.bedrock_model_id, region=settings.region, guardrail_id=settings.bedrock_guardrail_id
+        )
+    return None
 
 
 def create_app(
@@ -124,6 +165,7 @@ def create_app(
     pod_resolver: Callable[[str, str], PodContext] | None = None,
     executor: Executor | None = None,
     stores: Stores | None = None,
+    model: LanguageModel | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     stores = stores or build_stores(settings)
@@ -139,6 +181,13 @@ def create_app(
         load_policies(),
         executor,
         environment=settings.environment,
+    )
+    investigations = InvestigationService(
+        stores.investigations,
+        stores.cases,
+        stores.audit,
+        RunbookLibrary.from_dir(settings.runbooks_dir),
+        model or build_model(settings),
     )
 
     engine = CorrelationEngine(stores.cases)
@@ -182,6 +231,7 @@ def create_app(
     app.include_router(build_ingestion_router(pipeline, adapters, settings.credentials, coverage))
     app.include_router(build_cases_router(stores.cases, stores.audit, stores.entities))
     app.include_router(build_response_router(response, settings.analysts))
+    app.include_router(build_investigation_router(investigations, settings.analysts))
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
