@@ -5,7 +5,6 @@ kind: ClusterPolicy
 metadata:
   name: verify-cloudshield-images
 spec:
-  validationFailureAction: Audit
   webhookTimeoutSeconds: 30
   rules:
     - name: require-keyless-signature
@@ -15,7 +14,8 @@ spec:
               kinds: [Pod]
               namespaces: [cloudshield]
       verifyImages:
-        - imageReferences:
+        - failureAction: Audit
+          imageReferences:
             - "*.dkr.ecr.*.amazonaws.com/cloudshield/*"
           attestors:
             - entries:

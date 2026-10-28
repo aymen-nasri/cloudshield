@@ -1099,6 +1099,7 @@ flowchart LR
 | **GitHub OIDC + AWS IAM** | Short-lived CI credentials instead of long-lived keys [[R16]](#references) |
 | **Branch protection + approvals** | Controls who can deploy and who can change response code |
 | **Dependency review + SBOM** | Known dependency composition for vulnerability investigations |
+| **Infrastructure validation in CI** | `tofu fmt` + `tofu validate`, `helm lint`, kubeconform against Kubernetes and Kyverno schemas, `kyverno test` (the quarantine guard must catch a leaky allow-policy), Ansible syntax check, and static checks on the Step Functions definition. No cloud account needed |
 
 ### Platform observability
 
