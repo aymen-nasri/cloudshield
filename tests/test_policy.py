@@ -1,4 +1,4 @@
-"""The policy decision table from the README, plus approval binding (T-07)."""
+"""The policy decision table from docs/response.md, plus approval binding (T-07)."""
 
 from datetime import UTC, datetime, timedelta
 
