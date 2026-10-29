@@ -74,6 +74,7 @@ def simulated_pod_context(namespace: str, pod: str) -> PodContext:
 class Transcript:
     def __init__(self) -> None:
         self.lines: list[tuple[str, str]] = []  # (style, text)
+        self.report = ""
 
     def say(self, text: str, style: str = "") -> None:
         self.lines.append((style, text))
@@ -140,6 +141,9 @@ def run() -> Transcript:
     facts = inv["output"]["observed_facts"]
     row("5", "AI", f"{len(facts)} facts, each citing a real event ID", "stored for review")
     note(f"runbook retrieved: {', '.join(inv['retrieved_doc_ids'])} · offline baseline model (no LLM)")
+    review = {"decision": "accepted", "note": "facts match the Falco and GuardDuty evidence"}
+    r = api.post(f"/v1/investigations/{inv['investigation_id']}/review", json=review, headers=bob)
+    note(f"analyst review: {r.json()['review_status']} by bob")
 
     body = {"action_type": "k8s.pod.quarantine_label", "rationale": "curl | sh from 198.51.100.23",
             "target": {"kind": "Pod", "name": POD, "uid": POD_UID, "namespace": "shop"}}  # fmt: skip
@@ -170,6 +174,15 @@ def run() -> Transcript:
     audit = api.get("/v1/audit", params={"case_id": case["case_id"]}).json()
     intact = "intact" if audit["chain_intact"] else "BROKEN"
     row("10", "audit", f"{len(audit['records'])} hash-chained records", f"chain {intact}", "good")
+
+    report = api.get(f"/v1/cases/{case['case_id']}/report", headers=bob)
+    out.report = report.text
+    row(
+        "11",
+        "report",
+        "post-incident report from recorded evidence",
+        f"{len(report.text.splitlines())} lines",
+    )
     return out
 
 
@@ -204,12 +217,17 @@ def to_svg(transcript: Transcript) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--svg", type=Path, help="also write the transcript as an SVG terminal image")
+    parser.add_argument("--report", type=Path, help="also write the incident report it generates")
     args = parser.parse_args()
     transcript = run()
     if args.svg:
         args.svg.parent.mkdir(parents=True, exist_ok=True)
         args.svg.write_text(to_svg(transcript), encoding="utf-8", newline="\n")
         print(f"\nwrote {args.svg}")
+    if args.report:
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(transcript.report, encoding="utf-8", newline="\n")
+        print(f"wrote {args.report}")
     return 0
 
 
