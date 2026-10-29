@@ -86,6 +86,7 @@ def run() -> Transcript:
     settings = Settings(
         cluster="cs-lab-eks",
         account_id="123456789012",
+        investigator="offline",
         credentials={
             "falco": SourceCredential(token=falco_token),
             "guardduty": SourceCredential(hmac_secret=secret),
@@ -135,27 +136,31 @@ def run() -> Transcript:
         note(f"{t['event_time'][11:19]}Z  {t['source']:<9} {t['title'][:40]}")
     graph = api.get(f"/v1/entities/k8s:pod/shop/{POD}/graph").json()
     row("4", "enrich", "pod > deployment > service account > IAM role", f"{len(graph['entities'])} entities")
+    inv = api.post(f"/v1/cases/{case['case_id']}/investigations", headers=alice).json()
+    facts = inv["output"]["observed_facts"]
+    row("5", "AI", f"{len(facts)} facts, each citing a real event ID", "stored for review")
+    note(f"runbook retrieved: {', '.join(inv['retrieved_doc_ids'])} · offline baseline model (no LLM)")
 
     body = {"action_type": "k8s.pod.quarantine_label", "rationale": "curl | sh from 198.51.100.23",
             "target": {"kind": "Pod", "name": POD, "uid": POD_UID, "namespace": "shop"}}  # fmt: skip
     p = api.post(f"/v1/cases/{case['case_id']}/proposals", json=body, headers=alice).json()
-    row("5", "propose", "alice: quarantine the pod", p["state"])
+    row("6", "propose", "alice: quarantine the pod", p["state"])
     p = api.post(f"/v1/proposals/{p['proposal_id']}/dry-run", headers=bob).json()
-    row("6", "gate", "dry-run passed, policy allows with approval", p["state"])
+    row("7", "gate", "dry-run passed, policy allows with approval", p["state"])
     note(f"impact: pod keeps running, loses {', '.join(p['impact_preview']['allow_policies_lost'])}")
 
     pid, decision = p["proposal_id"], {"justification": "confirmed remote script execution"}
     stale = {**decision, "proposal_hash": "sha256:stale"}
     current = {**decision, "proposal_hash": p["proposal_hash"]}
     r = api.post(f"/v1/proposals/{pid}/approve", json=stale, headers=bob)
-    row("7", "approve", "bob, quoting an outdated proposal hash", f"{r.status_code} refused", "bad")
+    row("8", "approve", "bob, quoting an outdated proposal hash", f"{r.status_code} refused", "bad")
     r = api.post(f"/v1/proposals/{pid}/approve", json=current, headers=alice)
     row("", "approve", "alice, approving her own proposal", f"{r.status_code} refused", "bad")
     r = api.post(f"/v1/proposals/{pid}/approve", json=current, headers=bob)
     row("", "approve", "bob, current hash", r.json()["state"], "good")
 
     x = api.post(f"/v1/proposals/{pid}/execute", headers=bob).json()
-    row("8", "execute", "label the pod, then verify", x["state"], "good")
+    row("9", "execute", "label the pod, then verify", x["state"], "good")
     marks = {True: "ok", False: "FAILED", None: "skipped (planned)"}
     for name, passed in x["execution"]["checks"].items():
         note(f"{name:<30} {marks[passed]}")
@@ -164,7 +169,7 @@ def run() -> Transcript:
 
     audit = api.get("/v1/audit", params={"case_id": case["case_id"]}).json()
     intact = "intact" if audit["chain_intact"] else "BROKEN"
-    row("9", "audit", f"{len(audit['records'])} hash-chained records", f"chain {intact}", "good")
+    row("10", "audit", f"{len(audit['records'])} hash-chained records", f"chain {intact}", "good")
     return out
 
 
