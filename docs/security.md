@@ -69,7 +69,7 @@ flowchart LR
     GHA["GitHub Actions"] -. "OIDC: short-lived credentials" .-> STS["AWS STS"]
 ```
 
-> **What runs today.** ✅ On every pull request: tests with a PostgreSQL service, ruff, mypy, Gitleaks, infrastructure validation, the Docker build, the Trivy scan and an SBOM. 🧩 Cosign signing and the ECR push are written but skip until an AWS role is configured. 📐 Branch protection, dependency review, the Argo CD deploy, Kyverno admission in a live cluster and smoke tests are designed.
+> **What runs today.** ✅ On every pull request: tests with a PostgreSQL service, ruff, mypy, Gitleaks, infrastructure validation, the Docker build, the Trivy scan, an SBOM, and scenario S1 on a three-node kind cluster with real traffic checks. 🧩 Cosign signing and the ECR push are written but skip until an AWS role is configured. 📐 Branch protection, dependency review, the Argo CD deploy, Kyverno admission in a live cluster and smoke tests are designed.
 
 ### DevOps tooling
 

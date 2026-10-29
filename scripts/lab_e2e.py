@@ -176,7 +176,7 @@ def run() -> tuple[Transcript, list[str]]:
     row("5", "propose", "alice: quarantine the target pod", p["state"])
     p = api.post(f"/v1/proposals/{p['proposal_id']}/dry-run", headers=bob).json()
     lost = (p.get("impact_preview") or {}).get("allow_policies_lost") or []
-    row("6", "gate", "server-side dry run as the responder, policy check", p["state"],
+    row("6", "gate", "dry run as the responder, then the policy gate", p["state"],
         "checkout-allow" in lost)  # fmt: skip
     note(f"impact: pod keeps running, loses {', '.join(lost)}")
 

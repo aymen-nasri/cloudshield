@@ -36,9 +36,9 @@ with grounded AI investigations and response actions that cannot bypass policy o
 |---|---|
 | **What it does** | Turns AWS, Kubernetes and Linux security alerts into one evidence-backed case, then lets a containment action run only after a policy check and a named human approval, verifies the result, and writes the post-incident report ([sample](docs/sample-incident-report.md)) |
 | **Built with** | Python · FastAPI · Pydantic · PostgreSQL · OCSF · Kyverno · GitHub Actions, with OpenTofu and Helm validated in CI |
-| **Works with** | Falco, GuardDuty and Wazuh alert formats · the Kubernetes API (tested against a simulated API) · Amazon Bedrock (client written, not yet run) |
-| **Evidence it works** | 160+ automated tests in CI (including PostgreSQL and policy-bypass tests), infrastructure validated in CI with OpenTofu, Helm, kubeconform and Kyverno, and the replayable demo below |
-| **Status** | The detect → case → investigate → approve → contain → verify → report loop works in code and in CI. It has **not yet run on a real cluster, an AWS account or Bedrock** (see [Roadmap](#roadmap)) |
+| **Works with** | Falco, GuardDuty and Wazuh alert formats · the Kubernetes API (a live kind cluster in CI) · Amazon Bedrock (client written, not yet run) |
+| **Evidence it works** | 160+ automated tests in CI (including PostgreSQL and policy-bypass tests), infrastructure validated in CI with OpenTofu, Helm, kubeconform and Kyverno, the replayable demo below, and scenario S1 on a live kind cluster on every pull request |
+| **Status** | The detect → case → investigate → approve → contain → verify → report loop works in code and in CI, and its Kubernetes half runs on a real kind cluster on every pull request. It has **not yet run on EKS, an AWS account or Bedrock** (see [Roadmap](#roadmap)) |
 
 **Reading this README:** it describes the target design and marks what exists: ✅ **built**, implemented and tested here · 🧩 **as code**, written (OpenTofu, Helm, Step Functions definition, CI job) but never deployed · 📐 **designed**, documented only.
 
@@ -47,6 +47,8 @@ with grounded AI investigations and response actions that cannot bypass policy o
 `python scripts/demo.py` replays scenario S1 through the real API: CloudShield's ingestion, enrichment, correlation, policy gate, approvals, execution and audit code all run for real; only the Kubernetes API and AWS lookups are simulated.
 
 <p align="center"><img src="docs/demo.svg" alt="Terminal output of scripts/demo.py: two alerts become one case, a quarantine is proposed, two unsafe approvals are refused, the approved action runs once and is verified, and the audit chain is intact" width="820"/></p>
+
+**On a real cluster.** The [`kind lab` CI job](https://github.com/aymen-nasri/cloudshield/actions/workflows/ci.yml?query=branch%3Amain) builds a three-node kind cluster with Calico and runs [`scripts/lab_e2e.py`](scripts/lab_e2e.py) against it. CloudShield quarantines a live checkout pod as its responder service account. A probe pod then shows the pod is cut off while its sibling replica still answers, and that rollback restores traffic. Five least-privilege checks are refused by the API server. Locally: `make lab-up && make lab-e2e`.
 
 **The analyst console** (`python scripts/console_demo.py`, then open http://127.0.0.1:8090/console) is the incident page from the design, served by the API. Here a quarantine is waiting for approval: the facts cite their events, the affected pod is traced to its IAM role and EC2 instance, and the impact preview shows what the pod will lose.
 
@@ -57,7 +59,7 @@ with grounded AI investigations and response actions that cannot bypass policy o
 | If you're hiring for… | Read | Then open |
 |---|---|---|
 | **Cloud security engineer** | [AWS layer](docs/technology-stack.md#aws-cloud-layer), and scenario S2: a pod's stolen IAM credentials joined to its runtime alert | [`enrichment/`](services/enrichment), [`guardduty.py`](services/ingestion/adapters/guardduty.py), [`infra/tofu/envs/lab/`](infra/tofu/envs/lab) |
-| **DevSecOps / platform security** | [DevSecOps pipeline](docs/security.md#devops-and-devsecops-pipeline), [ADR 0002](docs/adr/0002-quarantine-via-label.md) | [`ci.yml`](.github/workflows/ci.yml), [`infra/policies/`](infra/policies), [Kyverno test](infra/policies/kyverno/tests/require-quarantine-exclusion/kyverno-test.yaml) |
+| **DevSecOps / platform security** | [DevSecOps pipeline](docs/security.md#devops-and-devsecops-pipeline), [ADR 0002](docs/adr/0002-quarantine-via-label.md) | [`ci.yml`](.github/workflows/ci.yml), [`lab_e2e.py`](scripts/lab_e2e.py), [`infra/policies/`](infra/policies), [Kyverno test](infra/policies/kyverno/tests/require-quarantine-exclusion/kyverno-test.yaml) |
 | **Detection engineer** | [Correlation rules](docs/data-pipeline.md#correlation-rules), [attack scenarios](#incident-scenarios-and-mitre-attck-mapping) | [`cloudshield_rules.yaml`](detections/falco/cloudshield_rules.yaml), [`adapters/`](services/ingestion/adapters), [`test_scenarios.py`](tests/test_scenarios.py) |
 | **SOC analyst / incident responder** | [The analyst incident page](docs/response.md#the-analyst-incident-page), [sample incident report](docs/sample-incident-report.md) | [`runbooks/`](runbooks), [`detections/fixtures/`](detections/fixtures), the console above |
 | **Security automation / SOAR** | [Human-approved response](docs/response.md#human-approved-response) | [`response/service.py`](services/response/service.py), [`policy/engine.py`](services/policy/engine.py), [`actions.yaml`](services/policy/policies/actions.yaml), [`test_response_flow.py`](tests/test_response_flow.py) |
@@ -123,7 +125,7 @@ CloudShield does **not** reinvent detection, a SIEM, or AWS's own AI investigati
 |---|---|
 | **AWS** | ✅ GuardDuty findings, EKS Pod Identity and EC2 lookups, S3 evidence store, SQS consumer · 🧩 VPC, EKS, IAM, EventBridge, S3 Object Lock, budgets, GitHub OIDC (OpenTofu), Step Functions + Lambda (definition and handler), Bedrock client · 📐 CloudTrail, Security Hub, Secrets Manager |
 | **Linux** | ✅ Wazuh alert ingestion and the host-compromise scenario · 🧩 host hardening and Wazuh enrolment with Ansible |
-| **Kubernetes** | ✅ workload metadata, NetworkPolicy quarantine and its verification, Kyverno policy tests · 🧩 RBAC, Helm chart, demo app |
+| **Kubernetes** | ✅ workload metadata, NetworkPolicy quarantine traffic-tested on kind, least-privilege RBAC checked against a live API server, Kyverno policy tests · 🧩 Helm chart, EKS |
 | **Networking** | ✅ pod-to-pod policy and egress control in the quarantine · 🧩 VPC Flow Logs enabled in OpenTofu · 📐 Security Group isolation, eBPF visibility (Cilium/Hubble) |
 | **Detection engineering** | ✅ custom Falco rules, five replayable attack scenarios tested in CI, MITRE ATT&CK tagging |
 | **Data engineering** | ✅ OCSF normalization, idempotent ingestion, PostgreSQL modeling and migrations · 🧩 dead-letter queue · 📐 OpenSearch indexing |
@@ -347,13 +349,13 @@ cloudshield/
 │   └── fixtures/         # labeled, replayable incidents (S1, S2, S3, S6, S8)
 ├── infra/
 │   ├── tofu/envs/lab/    # OpenTofu: VPC, EKS, GuardDuty → EventBridge → SQS, S3 evidence, budgets, CI OIDC
-│   ├── kind/             # local lab cluster
+│   ├── kind/             # local lab cluster and traffic probe
 │   ├── k8s/              # demo "shop" application
 │   ├── helm/             # CloudShield chart, Falco values
 │   ├── ansible/          # Linux host hardening, Wazuh agent, signed Wazuh integration
 │   └── policies/         # Kyverno, NetworkPolicy baseline, RBAC
 ├── evals/                # AI grounding and safety evaluation harness
-├── scripts/              # demo, console demo, fixture replay, schema export
+├── scripts/              # demo, kind lab run, console demo, fixture replay, schema export
 ├── tests/                # unit, API and negative policy tests
 ├── docs/                 # deep-dive pages, architecture decision records, sample report
 ├── .github/workflows/    # CI: lint, typecheck, test, secret scan, image scan, SBOM, sign
@@ -364,7 +366,7 @@ cloudshield/
 
 ## Getting started
 
-> **Status:** the core API, PostgreSQL persistence (events, cases, entity graph, hash-chained audit log), Kubernetes/AWS enrichment, the full proposal → approval → execution → verification API, the AI investigation API with runbook retrieval (offline baseline model; Bedrock when configured) and the test suite run today. So do the analyst console and post-incident reports. The kind and AWS labs are defined in code but have not been brought up yet (M1).
+> **Status:** the core API, PostgreSQL persistence (events, cases, entity graph, hash-chained audit log), Kubernetes/AWS enrichment, the full proposal → approval → execution → verification API, the AI investigation API with runbook retrieval (offline baseline model; Bedrock when configured) and the test suite run today. So do the analyst console and post-incident reports. The kind lab runs in CI on every pull request; the AWS lab is defined in code but has not been brought up yet (M1).
 
 **Prerequisites:** Python 3.12+, Docker, Make. For the local lab: kind, kubectl, Helm. For the AWS lab: OpenTofu, the AWS CLI and a dedicated AWS account.
 
@@ -398,6 +400,7 @@ docker compose restart core && curl localhost:8080/v1/cases   # the case survive
 
 ```bash
 make lab-up          # kind + Calico + demo "shop" app + quarantine-ready NetworkPolicies + RBAC + Falco
+make lab-e2e         # scenario S1 on the cluster, with real traffic probes (CI runs it on every PR)
 make lab-down
 ```
 
