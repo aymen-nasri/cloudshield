@@ -205,7 +205,10 @@ async function renderCase(caseId) {
       "div",
       { class: "incident-head" },
       el("div", {}, el("h1", {}, detail.title), el("div", { class: "muted mono" }, detail.case_id)),
-      el("div", { class: "row" }, pill(detail.severity, detail.severity), proposal ? pill(proposal.state.replaceAll("_", " "), proposal.state) : pill("no action proposed")),
+      el("div", { class: "row" },
+        pill(detail.severity, detail.severity),
+        proposal ? pill(proposal.state.replaceAll("_", " "), proposal.state) : pill("no action proposed"),
+        el("button", { onclick: () => downloadReport(caseId) }, "Download report")),
     ),
     synopsisCard(caseId, investigation),
     await entityCard(pod),
@@ -219,6 +222,23 @@ async function renderCase(caseId) {
       `${audit.records.length} hash-chained records for this case`,
     ),
   );
+}
+
+async function downloadReport(caseId) {
+  // The report needs the analyst's token, so fetch it and hand the browser the bytes to save.
+  try {
+    const res = await fetch(`/v1/cases/${encodeURIComponent(caseId)}/report`, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!res.ok) throw new ApiError(res.status, res.statusText);
+    const url = URL.createObjectURL(new Blob([await res.text()], { type: "text/markdown" }));
+    const link = el("a", { href: url, download: `cloudshield-${caseId}-report.md` });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    toast("Report downloaded");
+  } catch (err) {
+    toast(err.status ? `${err.status}: ${err.message}` : String(err), true);
+  }
 }
 
 function card(num, title, ...body) {

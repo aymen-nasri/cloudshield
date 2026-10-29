@@ -244,7 +244,8 @@ class ResponseService:
             self.audit.append(
                 "human",
                 principal.id,
-                f"proposal.{decision}d" if decision == "approve" else "proposal.rejected_by_human",
+                # The decision itself; the state change it may cause is audited separately.
+                "approval.granted" if decision == "approve" else "approval.denied",
                 {
                     "case_id": record.proposal.case_id,
                     "proposal_id": proposal_id,
