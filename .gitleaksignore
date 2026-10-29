@@ -6,3 +6,8 @@ fbb8c1b84b133812632a648f0f7af2c1119feda7:tests/test_adapters.py:generic-api-key:
 fbb8c1b84b133812632a648f0f7af2c1119feda7:tests/test_adapters.py:generic-api-key:43
 fbb8c1b84b133812632a648f0f7af2c1119feda7:tests/test_adapters.py:generic-api-key:65
 883c1493fed955825c69906797b5822ce51a2fa9:tests/test_adapters.py:generic-api-key:80
+
+# Reviewed false positives (aws-access-token): synthetic GuardDuty fixture key IDs in the first S2
+# commit; the fixtures now say REDACTED (CloudShield never reads accessKeyId).
+1a4d69bcd7645c961e4c3486f60fd035ceba5174:detections/fixtures/s2_identity_misuse/guardduty_discovery.json:aws-access-token:23
+1a4d69bcd7645c961e4c3486f60fd035ceba5174:detections/fixtures/s2_identity_misuse/guardduty_exfiltration.json:aws-access-token:23
