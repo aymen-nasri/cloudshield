@@ -37,7 +37,7 @@ with grounded AI investigations and response actions that cannot bypass policy o
 | **What it does** | Turns AWS, Kubernetes and Linux security alerts into one evidence-backed case, then lets a containment action run only after a policy check and a named human approval, and verifies the result |
 | **Built with** | Python · FastAPI · Pydantic · PostgreSQL · OCSF · Falco · GuardDuty · Amazon Bedrock · Kubernetes · OpenTofu · Helm · Kyverno · GitHub Actions |
 | **Evidence it works** | 100+ automated tests in CI (including PostgreSQL and policy-bypass tests), infrastructure validated in CI with OpenTofu, Helm, kubeconform and Kyverno, and the replayable demo below |
-| **Status** | The detect → case → approve → contain → verify loop works in code. Lab cluster and AWS deployment are in progress (see [Roadmap](#roadmap)) |
+| **Status** | The detect → case → investigate → approve → contain → verify loop works in code. Bedrock runs, lab cluster and AWS deployment are in progress (see [Roadmap](#roadmap)) |
 
 ### See it run
 
@@ -51,7 +51,7 @@ with grounded AI investigations and response actions that cannot bypass policy o
 |---|---|
 | The response workflow and its safety checks | [`services/response/service.py`](services/response/service.py) |
 | How the policy gate decides | [`services/policy/engine.py`](services/policy/engine.py), [`actions.yaml`](services/policy/policies/actions.yaml) |
-| How AI output is kept grounded | [`services/investigator/validate.py`](services/investigator/validate.py), [`bundle.py`](services/investigator/bundle.py) |
+| How AI output is kept grounded | [`services/investigator/validate.py`](services/investigator/validate.py), [`bundle.py`](services/investigator/bundle.py), [`workflow.py`](services/investigator/workflow.py) |
 | Alert normalization to OCSF | [`services/ingestion/adapters/`](services/ingestion/adapters) |
 | Tests that try to bypass approvals | [`tests/test_response_flow.py`](tests/test_response_flow.py) |
 | The quarantine design and why | [ADR 0002](docs/adr/0002-quarantine-via-label.md), [Kyverno test](infra/policies/kyverno/tests/require-quarantine-exclusion/kyverno-test.yaml) |
@@ -826,6 +826,17 @@ class Investigation(BaseModel):
 
 </details>
 
+### How an investigation runs
+
+`POST /v1/cases/{id}/investigations` ([`workflow.py`](services/investigator/workflow.py)):
+
+1. The case's events are redacted and wrapped as untrusted evidence; runbooks whose front matter matches the case's event types or ATT&CK techniques are retrieved as citable passages ([`runbooks.py`](services/investigator/runbooks.py)).
+2. The model answers in the investigation schema. An answer citing an event that isn't in the case, or targeting an entity outside it, is rejected; the model gets one retry with the validator's messages only, then the run fails and the failure is audited.
+3. A valid investigation is stored with its model ID, prompt version, runbooks used and number of attempts, and recorded in the audit log under the model's identity.
+4. An analyst accepts or rejects it, once. Nothing in an investigation can start a response action.
+
+**Models:** `CLOUDSHIELD_INVESTIGATOR=bedrock` uses Amazon Bedrock. `offline` is a deterministic baseline with no language model ([`offline.py`](services/investigator/offline.py)): it restates the evidence as cited facts, so the whole path runs in tests, the demo and the lab without AWS. The eval harness scores it as the floor any real model has to beat.
+
 ### Why guardrails alone are not enough
 
 Logs, alert descriptions and retrieved pages can carry **attacker-controlled text**. OWASP lists prompt injection and excessive agency among the top LLM application risks [[R12]](#references). CloudShield treats every event field and every RAG passage as untrusted, and it enforces access and actions **outside the model**. Bedrock Guardrails adds protection but never replaces independent authorization [[R10]](#references).
@@ -1023,7 +1034,9 @@ COVERAGE   Falco ● ok    GuardDuty ● ok    Wazuh ● degraded (no heartbeat 
 | `GET` | `/v1/cases/{id}/timeline` | Event-time-ordered timeline with sources | `case:read` |
 | `GET` | `/v1/events?q=` | Search normalized events | `event:read` |
 | `GET` | `/v1/entities/{id}/graph` | Relationship graph with assurance levels | `case:read` |
-| `POST` | `/v1/cases/{id}/investigations` | Run the AI investigator on the current evidence bundle | `ai:invoke` |
+| `POST` | `/v1/cases/{id}/investigations` | Run the AI investigator on the case's evidence and matching runbooks; stored only if every citation checks out | `ai:invoke` |
+| `GET` | `/v1/cases/{id}/investigations` | Investigations for a case, with model ID, prompt version and runbooks used | `case:read` |
+| `POST` | `/v1/investigations/{id}/review` | An analyst accepts or rejects an investigation, once | `ai:review` |
 | `GET` | `/v1/proposals/{id}` | Proposal, policy decision and impact preview | `case:read` |
 | `POST` | `/v1/proposals/{id}/dry-run` | Re-run the dry-run and the freshness check | `response:propose` |
 | `POST` | `/v1/proposals/{id}/approve` | Approve; the body must include the proposal hash | `response:approve` |
@@ -1177,7 +1190,7 @@ CloudShield's benefits are claimed only once they have been **measured**. Each K
 
 | ID | Test | Expected behavior | Milestone | Status |
 |---|---|---|---|---|
-| T-01 | **Happy path** | Valid Falco alert → correct case → grounded report → approved action → verification | M4 | 🧪 without the AI report |
+| T-01 | **Happy path** | Valid Falco alert → correct case → grounded report → approved action → verification | M4 | 🧪 (offline baseline model) |
 | T-02 | **Duplicate delivery** | One source event produces exactly one canonical finding and case link | M2 | 🧪 |
 | T-03 | **Out-of-order events** | The timeline is rebuilt by event time, not arrival order | M2 | 🧪 |
 | T-04 | **Sensor outage** | Coverage is marked degraded; CloudShield doesn't report "all clear" | M2 | 🧪 |
@@ -1199,7 +1212,7 @@ The roadmap is ordered by **learning and risk reduction**, not by the number of 
 |---|---|---|---|---|
 | **M1 · Protected lab and repeatable deployment** | Small app on Kubernetes, a Linux host, network baseline, AWS logging and identity, IaC and documentation | Another engineer can reproduce the isolated lab and inspect its topology | Agentic AI, multiple clusters, destructive response | 🟡 In progress |
 | **M2 · Security operations core** | Two source types, OCSF normalization, PostgreSQL + OpenSearch, basic cases and dashboard, simple correlation | A simulated alert can be traced to its raw evidence and correct resource context | Recreating a full SIEM | 🟡 In progress |
-| **M3 · AI investigator (read-only)** | One LLM, runbook corpus, retrieval, bounded evidence packets, structured cited summaries, evaluation fixtures | Grounded summaries on labeled incidents; all negative tests pass | Trusting model-generated commands or exploitability claims | ⬜ Planned |
+| **M3 · AI investigator (read-only)** | One LLM, runbook corpus, retrieval, bounded evidence packets, structured cited summaries, evaluation fixtures | Grounded summaries on labeled incidents; all negative tests pass | Trusting model-generated commands or exploitability claims | 🟡 In progress |
 | **M4 · Controlled response** | Response state machine, approval, policy gate, one reversible lab action, audit and verification | Detect → investigate → approve → act → verify, end to end | Real production auto-isolation | 🟡 In progress |
 | **M5 · Cross-layer expansion** | Hubble/Cilium, deeper AWS identity context, network relationship mapping, broader runbooks, scoped multi-step read-only agent | A second, distinct scenario handled with measured improvement | Any tool that doesn't improve a validated workflow | ⬜ Planned |
 
@@ -1331,7 +1344,7 @@ cloudshield/
 
 ## Getting started
 
-> **Status:** the core API, PostgreSQL persistence (events, cases, entity graph, hash-chained audit log), Kubernetes/AWS enrichment, the full proposal → approval → execution → verification API, the investigator contract and the test suite run today. OpenSearch indexing and the analyst console are next (M2). The kind and AWS labs are defined in code and are being brought up as part of M1.
+> **Status:** the core API, PostgreSQL persistence (events, cases, entity graph, hash-chained audit log), Kubernetes/AWS enrichment, the full proposal → approval → execution → verification API, the AI investigation API with runbook retrieval (offline baseline model; Bedrock when configured) and the test suite run today. OpenSearch indexing and the analyst console are next (M2). The kind and AWS labs are defined in code and are being brought up as part of M1.
 
 **Prerequisites:** Python 3.12+, Docker, Make. For the local lab: kind, kubectl, Helm. For the AWS lab: OpenTofu, the AWS CLI and a dedicated AWS account.
 

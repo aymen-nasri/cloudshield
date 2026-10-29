@@ -88,7 +88,7 @@ def score(case: dict[str, Any], bundle: EvidenceBundle, output: str) -> Score:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--candidates", type=Path, default=ROOT / "evals" / "candidates")
-    parser.add_argument("--bedrock", action="store_true", help="generate outputs with Bedrock (M3)")
+    parser.add_argument("--bedrock", action="store_true", help="generate outputs with Bedrock")
     parser.add_argument("--model-id")
     args = parser.parse_args()
 
@@ -103,10 +103,16 @@ def main() -> int:
             run = Investigator(BedrockClient(args.model_id)).investigate(bundle)
             outputs = {"bedrock": run.investigation.model_dump_json()}
         else:
+            from investigator.offline import OfflineBaselineModel
+            from investigator.service import Investigator
+
             outputs = {
                 p.stem: p.read_text(encoding="utf-8")
                 for p in sorted(args.candidates.glob(f"{case['id']}*.json"))
             }
+            # The offline baseline is scored too, as the floor a real model has to beat.
+            baseline = Investigator(OfflineBaselineModel()).investigate(bundle)
+            outputs[f"{case['id']}.offline-baseline"] = baseline.investigation.model_dump_json()
         for label, output in outputs.items():
             s = score(case, bundle, output)
             results.append({"candidate": label, **asdict(s)})

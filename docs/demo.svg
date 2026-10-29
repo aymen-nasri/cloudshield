@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="724" height="533" viewBox="0 0 724 533" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5">
-<rect width="724" height="533" rx="8" fill="#0d1117"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="724" height="571" viewBox="0 0 724 571" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5">
+<rect width="724" height="571" rx="8" fill="#0d1117"/>
 <circle cx="18" cy="16" r="5" fill="#ff5f56"/><circle cx="34" cy="16" r="5" fill="#ffbd2e"/><circle cx="50" cy="16" r="5" fill="#27c93f"/>
 <text x="706" y="20" fill="#6e7681" text-anchor="end">python scripts/demo.py</text>
 <text x="18" y="48" fill="#e6edf3" font-weight="bold" xml:space="preserve">CloudShield · scenario S1: suspicious process in a pod</text>
@@ -8,23 +8,25 @@
 <text x="18" y="105" fill="#c9d1d9" xml:space="preserve">1  ingest   GuardDuty: new binary executed in pod          -&gt; 202 accepted</text>
 <text x="18" y="124" fill="#c9d1d9" xml:space="preserve">2  ingest   Falco: curl | sh in container (arrives late)   -&gt; 202 accepted</text>
 <text x="18" y="143" fill="#8b949e" xml:space="preserve">   replay   same Falco alert delivered twice               -&gt; 202 duplicate</text>
-<text x="18" y="162" fill="#c9d1d9" xml:space="preserve">3  case     2 events in one case, severity medium          -&gt; case_01M6286T2WTQNY1N2Y6NQYFWP4</text>
+<text x="18" y="162" fill="#c9d1d9" xml:space="preserve">3  case     2 events in one case, severity medium          -&gt; case_01M629ET66D5BTTG9CB1BXKPBM</text>
 <text x="18" y="181" fill="#8b949e" xml:space="preserve">            joined by rule C-01: same pod UID within 15 min</text>
 <text x="18" y="200" fill="#8b949e" xml:space="preserve">            14:02:40Z  falco     Unexpected Process in Protected Workload</text>
 <text x="18" y="219" fill="#8b949e" xml:space="preserve">            14:03:05Z  guardduty A newly created or recently modified bin</text>
 <text x="18" y="238" fill="#c9d1d9" xml:space="preserve">4  enrich   pod &gt; deployment &gt; service account &gt; IAM role  -&gt; 5 entities</text>
-<text x="18" y="257" fill="#c9d1d9" xml:space="preserve">5  propose  alice: quarantine the pod                      -&gt; proposed</text>
-<text x="18" y="276" fill="#c9d1d9" xml:space="preserve">6  gate     dry-run passed, policy allows with approval    -&gt; awaiting_approval</text>
-<text x="18" y="295" fill="#8b949e" xml:space="preserve">            impact: pod keeps running, loses checkout-allow</text>
-<text x="18" y="314" fill="#f0883e" xml:space="preserve">7  approve  bob, quoting an outdated proposal hash         -&gt; 409 refused</text>
-<text x="18" y="333" fill="#f0883e" xml:space="preserve">   approve  alice, approving her own proposal              -&gt; 403 refused</text>
-<text x="18" y="352" fill="#3fb950" xml:space="preserve">   approve  bob, current hash                              -&gt; approved</text>
-<text x="18" y="371" fill="#3fb950" xml:space="preserve">8  execute  label the pod, then verify                     -&gt; verified</text>
-<text x="18" y="390" fill="#8b949e" xml:space="preserve">            label_present                  ok</text>
-<text x="18" y="409" fill="#8b949e" xml:space="preserve">            default_deny_present           ok</text>
-<text x="18" y="428" fill="#8b949e" xml:space="preserve">            no_allow_policy_selects_pod    ok</text>
-<text x="18" y="447" fill="#8b949e" xml:space="preserve">            pod_preserved_for_forensics    ok</text>
-<text x="18" y="466" fill="#8b949e" xml:space="preserve">            egress_probe                   skipped (planned)</text>
-<text x="18" y="485" fill="#f0883e" xml:space="preserve">   execute  run it a second time                           -&gt; 409 refused</text>
-<text x="18" y="504" fill="#3fb950" xml:space="preserve">9  audit    10 hash-chained records                        -&gt; chain intact</text>
+<text x="18" y="257" fill="#c9d1d9" xml:space="preserve">5  AI       2 facts, each citing a real event ID           -&gt; stored for review</text>
+<text x="18" y="276" fill="#8b949e" xml:space="preserve">            runbook retrieved: RB-001 · offline baseline model (no LLM)</text>
+<text x="18" y="295" fill="#c9d1d9" xml:space="preserve">6  propose  alice: quarantine the pod                      -&gt; proposed</text>
+<text x="18" y="314" fill="#c9d1d9" xml:space="preserve">7  gate     dry-run passed, policy allows with approval    -&gt; awaiting_approval</text>
+<text x="18" y="333" fill="#8b949e" xml:space="preserve">            impact: pod keeps running, loses checkout-allow</text>
+<text x="18" y="352" fill="#f0883e" xml:space="preserve">8  approve  bob, quoting an outdated proposal hash         -&gt; 409 refused</text>
+<text x="18" y="371" fill="#f0883e" xml:space="preserve">   approve  alice, approving her own proposal              -&gt; 403 refused</text>
+<text x="18" y="390" fill="#3fb950" xml:space="preserve">   approve  bob, current hash                              -&gt; approved</text>
+<text x="18" y="409" fill="#3fb950" xml:space="preserve">9  execute  label the pod, then verify                     -&gt; verified</text>
+<text x="18" y="428" fill="#8b949e" xml:space="preserve">            label_present                  ok</text>
+<text x="18" y="447" fill="#8b949e" xml:space="preserve">            default_deny_present           ok</text>
+<text x="18" y="466" fill="#8b949e" xml:space="preserve">            no_allow_policy_selects_pod    ok</text>
+<text x="18" y="485" fill="#8b949e" xml:space="preserve">            pod_preserved_for_forensics    ok</text>
+<text x="18" y="504" fill="#8b949e" xml:space="preserve">            egress_probe                   skipped (planned)</text>
+<text x="18" y="523" fill="#f0883e" xml:space="preserve">   execute  run it a second time                           -&gt; 409 refused</text>
+<text x="18" y="542" fill="#3fb950" xml:space="preserve">10 audit    11 hash-chained records                        -&gt; chain intact</text>
 </svg>
