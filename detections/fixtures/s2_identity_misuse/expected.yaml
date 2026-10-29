@@ -1,0 +1,17 @@
+scenario: S2
+title: Stolen pod credentials used outside AWS
+description: >
+  The shop-checkout-pod role's temporary credentials are used from an external IP (GuardDuty
+  InstanceCredentialExfiltration.OutsideAWS), then the same role runs discovery calls against S3.
+  Both are account-level findings with no cluster; rule C-03 joins them on the IAM principal.
+  When the S1 pod alert is also present and enriched, C-03 joins this finding to that pod's case:
+  the cross-layer link (tests/test_scenarios.py).
+replay_order: [guardduty_exfiltration.json, guardduty_discovery.json]
+mitre: [T1078.004, T1552.005, T1580]
+expect:
+  cases: 1
+  links:
+    - { source: guardduty, rule: C-00 }
+    - { source: guardduty, rule: C-03 }
+  severity: high
+  containment: false   # no pod in this case: the IAM response is a human decision (key rotation)

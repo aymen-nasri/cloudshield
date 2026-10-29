@@ -1,0 +1,45 @@
+{
+  "version": "0",
+  "id": "5d1c8e72-3a4b-4c9d-b6e0-2f7a9b1c4d83",
+  "detail-type": "GuardDuty Finding",
+  "source": "aws.guardduty",
+  "account": "123456789012",
+  "time": "2026-10-28T14:41:05Z",
+  "region": "eu-west-1",
+  "resources": [],
+  "detail": {
+    "schemaVersion": "2.0",
+    "accountId": "123456789012",
+    "region": "eu-west-1",
+    "id": "f2a8b4d06c3e5f9a0b1c7d2e4f6a8b0d",
+    "type": "Discovery:IAMUser/AnomalousBehavior",
+    "title": "An API commonly used in discovery tactics was invoked by the role shop-checkout-pod in an unusual way.",
+    "severity": 5.0,
+    "createdAt": "2026-10-28T14:40:51.000Z",
+    "updatedAt": "2026-10-28T14:40:51.000Z",
+    "resource": {
+      "resourceType": "AccessKey",
+      "accessKeyDetails": {
+        "accessKeyId": "ASIAEXAMPLEEXFIL0001",
+        "principalId": "AROAEXAMPLEROLE00001:eks-shop-checkout",
+        "userName": "shop-checkout-pod",
+        "userType": "AssumedRole"
+      }
+    },
+    "service": {
+      "serviceName": "guardduty",
+      "eventFirstSeen": "2026-10-28T14:38:12.000Z",
+      "eventLastSeen": "2026-10-28T14:38:12.000Z",
+      "count": 3,
+      "action": {
+        "actionType": "AWS_API_CALL",
+        "awsApiCallAction": {
+          "api": "GetBucketPolicy",
+          "serviceName": "s3.amazonaws.com",
+          "callerType": "Remote IP",
+          "remoteIpDetails": { "ipAddressV4": "203.0.113.50" }
+        }
+      }
+    }
+  }
+}

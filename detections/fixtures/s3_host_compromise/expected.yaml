@@ -1,0 +1,17 @@
+scenario: S3
+title: Linux host compromise indicator
+description: >
+  SSH brute force against web-01, then a successful login for "deploy" from the same IP, then a
+  new file in /etc/cron.d (persistence). All three Wazuh alerts carry the agent's EC2 instance
+  label; rule C-02 joins them into one host case within 30 minutes. Host isolation is not an
+  allowlisted action yet, so CloudShield preserves evidence and recommends no automated containment.
+replay_order: [wazuh_bruteforce.json, wazuh_login_after_failures.json, wazuh_cron_added.json]
+mitre: [T1110, T1078, T1053.003]
+expect:
+  cases: 1
+  links:
+    - { source: wazuh, rule: C-00 }
+    - { source: wazuh, rule: C-02 }
+    - { source: wazuh, rule: C-02 }
+  severity: high
+  containment: false
