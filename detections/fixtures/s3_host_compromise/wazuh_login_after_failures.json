@@ -1,0 +1,19 @@
+{
+  "id": "1761641366.49870",
+  "timestamp": "2026-10-28T09:09:26.000+0000",
+  "rule": {
+    "id": "40112",
+    "level": 12,
+    "description": "Multiple authentication failures followed by a success.",
+    "groups": ["authentication_success", "attack"],
+    "mitre": { "id": ["T1110", "T1078"], "tactic": ["Credential Access", "Initial Access"] }
+  },
+  "agent": {
+    "id": "003",
+    "name": "web-01",
+    "ip": "10.20.3.50",
+    "labels": { "aws.instance_id": "i-0f1e2d3c4b5a69788" }
+  },
+  "data": { "srcip": "198.51.100.77", "srcuser": "deploy" },
+  "full_log": "Oct 28 09:09:26 web-01 sshd[2380]: Accepted password for deploy from 198.51.100.77 port 50410 ssh2"
+}

@@ -11,6 +11,7 @@ expect:
     - { source: guardduty, rule: C-00 }
     - { source: falco, rule: C-01 }
   severity: medium
+  containment: true   # two independent detectors on the same pod
 required_evidence:
   - the Falco alert with proc.cmdline
   - the GuardDuty finding for the same pod UID

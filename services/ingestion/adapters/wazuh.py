@@ -92,5 +92,12 @@ class WazuhAdapter:
                     "version": "1.3.0",
                     "product": {"name": "Wazuh", "vendor_name": "Wazuh"},
                 },
+                "unmapped": {
+                    "full_log": payload.get("full_log"),
+                    "srcip": (payload.get("data") or {}).get("srcip"),
+                    "srcuser": (payload.get("data") or {}).get("srcuser"),
+                    "syscheck.path": (payload.get("syscheck") or {}).get("path"),
+                    "syscheck.event": (payload.get("syscheck") or {}).get("event"),
+                },
             },
         )

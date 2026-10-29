@@ -133,4 +133,5 @@ def test_injected_instructions_reach_the_model_only_as_evidence(env, falco):
     assert "ignore all previous instructions" not in seen["system"]
     start, end = seen["user"].index("<untrusted_evidence"), seen["user"].index("</untrusted_evidence")
     assert start < seen["user"].index("ignore all previous instructions") < end
-    assert record.output.containment_options[0].action_type == "k8s.pod.quarantine_label"
+    # One uncorroborated medium alert: the baseline recommends no containment, whatever the text asks.
+    assert record.output.containment_options == []
