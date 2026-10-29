@@ -50,6 +50,8 @@ with grounded AI investigations and response actions that cannot bypass policy o
 
 **On a real cluster.** The [`kind lab` CI job](https://github.com/aymen-nasri/cloudshield/actions/workflows/ci.yml?query=branch%3Amain) builds a three-node kind cluster with Calico and runs [`scripts/lab_e2e.py`](scripts/lab_e2e.py) against it. CloudShield quarantines a live checkout pod as its responder service account. A probe pod then shows the pod is cut off while its sibling replica still answers, and that rollback restores traffic. Five least-privilege checks are refused by the API server. Locally: `make lab-up && make lab-e2e`.
 
+<p align="center"><img src="docs/lab-run.svg" alt="Terminal output of scripts/lab_e2e.py on a kind cluster: a live checkout pod is quarantined by the responder identity, traffic to it is blocked while another replica stays reachable, rollback restores it, five RBAC overreach attempts are refused with 403, and the audit chain is intact" width="746"/></p>
+
 **The analyst console** (`python scripts/console_demo.py`, then open http://127.0.0.1:8090/console) is the incident page from the design, served by the API. Here a quarantine is waiting for approval: the facts cite their events, the affected pod is traced to its IAM role and EC2 instance, and the impact preview shows what the pod will lose.
 
 <p align="center"><img src="docs/console.png" alt="CloudShield analyst console: case list, AI synopsis with review buttons, affected entity chain from pod to IAM role and EC2 instance, timeline, cited facts and hypotheses, and a quarantine proposal with policy decision, impact preview and Approve and Reject buttons" width="860"/></p>
