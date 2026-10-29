@@ -32,6 +32,7 @@ from investigator.runbooks import RunbookLibrary
 from investigator.service import LanguageModel
 from investigator.workflow import InvestigationService
 from policy.engine import load_policies
+from reporting.router import build_router as build_report_router
 from responder.executor import Executor, KubernetesExecutor
 from response.records import InMemoryProposalStore, ProposalStore
 from response.router import build_router as build_response_router
@@ -237,6 +238,16 @@ def create_app(
     app.include_router(build_response_router(response, settings.analysts))
     app.include_router(build_investigation_router(investigations, settings.analysts))
     app.include_router(build_console_router(settings.analysts, settings.console_demo_token))
+    app.include_router(
+        build_report_router(
+            stores.cases,
+            stores.investigations,
+            stores.proposals,
+            stores.audit,
+            stores.entities,
+            settings.analysts,
+        )
+    )
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
