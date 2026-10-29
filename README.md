@@ -34,7 +34,7 @@ with grounded AI investigations and response actions that cannot bypass policy o
 
 | | |
 |---|---|
-| **What it does** | Turns AWS, Kubernetes and Linux security alerts into one evidence-backed case, then lets a containment action run only after a policy check and a named human approval, and verifies the result |
+| **What it does** | Turns AWS, Kubernetes and Linux security alerts into one evidence-backed case, then lets a containment action run only after a policy check and a named human approval, verifies the result, and writes the post-incident report ([sample](docs/sample-incident-report.md)) |
 | **Built with** | Python · FastAPI · Pydantic · PostgreSQL · OCSF · Falco · GuardDuty · Amazon Bedrock · Kubernetes · OpenTofu · Helm · Kyverno · GitHub Actions |
 | **Evidence it works** | 100+ automated tests in CI (including PostgreSQL and policy-bypass tests), infrastructure validated in CI with OpenTofu, Helm, kubeconform and Kyverno, and the replayable demo below |
 | **Status** | The detect → case → investigate → approve → contain → verify loop works in code. Bedrock runs, lab cluster and AWS deployment are in progress (see [Roadmap](#roadmap)) |
@@ -58,6 +58,7 @@ with grounded AI investigations and response actions that cannot bypass policy o
 | How AI output is kept grounded | [`services/investigator/validate.py`](services/investigator/validate.py), [`bundle.py`](services/investigator/bundle.py), [`workflow.py`](services/investigator/workflow.py) |
 | Alert normalization to OCSF | [`services/ingestion/adapters/`](services/ingestion/adapters) |
 | Tests that try to bypass approvals | [`tests/test_response_flow.py`](tests/test_response_flow.py) |
+| A generated post-incident report | [`docs/sample-incident-report.md`](docs/sample-incident-report.md) ([builder](services/reporting/report.py)) |
 | The quarantine design and why | [ADR 0002](docs/adr/0002-quarantine-via-label.md), [Kyverno test](infra/policies/kyverno/tests/require-quarantine-exclusion/kyverno-test.yaml) |
 | AWS lab infrastructure | [`infra/tofu/envs/lab/`](infra/tofu/envs/lab) |
 
@@ -1047,7 +1048,7 @@ COVERAGE   Falco ● ok    GuardDuty ● ok    Wazuh ● degraded (no heartbeat 
 | `POST` | `/v1/proposals/{id}/reject` | Reject with a justification | `response:approve` |
 | `POST` | `/v1/proposals/{id}/execute` | Re-checks approvals and the target, executes once, verifies | `response:execute` |
 | `GET` | `/v1/cases/{id}/proposals` | Proposals for a case, with policy decisions, approvals and execution results | `case:read` |
-| `GET` | `/v1/cases/{id}/report` | Incident report (Markdown / PDF) | `case:read` |
+| `GET` | `/v1/cases/{id}/report` | Post-incident report as Markdown, built only from recorded evidence, with attacker-supplied text escaped ([sample](docs/sample-incident-report.md)) | `case:read` |
 | `GET` | `/v1/health/coverage` | Per-source heartbeat and coverage state | `ops:read` |
 | `GET` | `/v1/audit?case_id=` | Hash-chained audit records | `audit:read` |
 | `GET` | `/v1/me` | The signed-in analyst and roles | any analyst |
