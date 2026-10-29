@@ -32,11 +32,11 @@ Status markers: ✅ built and tested · 🧩 written as code, not deployed · �
 | Technology | Why it belongs | How it connects | Status |
 |---|---|---|---|
 | **RHEL / Amazon Linux** | Realistic host administration and process-level scenarios | Wazuh agent or curated host log export | 🧩 |
-| **Kubernetes (EKS)** | Runs the protected apps and CloudShield's own services | Pod, namespace, service account, event and audit context | 🧩 |
+| **Kubernetes (EKS)** | Runs the protected apps and CloudShield's own services | Pod, namespace, service account, event and audit context | ✅ kind in CI · 🧩 EKS |
 | **Helm** | Repeatable cluster components | Versioned, per-environment releases | 🧩 |
 | **Falco** | Near-real-time Linux and container runtime detection | Falcosidekick → token-authenticated webhook → adapter [[R6]](references.md#references) | ✅ rules and adapter |
 | **Wazuh** | Host logs, security events, file integrity, endpoint visibility | Wazuh integrator → adapter [[R5]](references.md#references) | ✅ adapter · 🧩 agent |
-| **Kubernetes RBAC** | Bounded cluster access by role and namespace | Read-only investigator identity; separate responder identity | 🧩 |
+| **Kubernetes RBAC** | Bounded cluster access by role and namespace | Read-only investigator identity; separate responder identity | ✅ refusals checked on kind in CI |
 | **EKS Pod Identity** | AWS permissions per service account | Scoped credential delivery [[R4]](references.md#references) | ✅ enrichment · 🧩 association |
 | **Trivy** | Vulnerability and misconfiguration scanning | CI reports and optional case enrichment | ✅ CI scan · 📐 case enrichment |
 | **Kyverno** | Admission policy, image verification | Policy reports; audit mode first, then enforce [[R13]](references.md#references) | ✅ policy tests · 🧩 admission |
@@ -49,7 +49,7 @@ Status markers: ✅ built and tested · 🧩 written as code, not deployed · �
 |---|---|---|---|
 | **VPC Flow Logs** | Flow metadata: IPs, ports, accept/reject | No payloads; must be explicitly enabled | 🧩 enabled · 📐 ingested |
 | **Security Groups** | AWS network access controls | A change can affect critical services | 📐 |
-| **Kubernetes NetworkPolicies** | Pod ingress and egress control | Enforcement depends on the CNI | ✅ |
+| **Kubernetes NetworkPolicies** | Pod ingress and egress control | Enforcement depends on the CNI | ✅ traffic-tested on kind with Calico |
 | **Cilium** *(advanced)* | eBPF networking and security | Operational learning curve | 📐 |
 | **Hubble** *(advanced)* | Service-to-service flow visibility on Cilium | Does not replace host or AWS logs [[R7]](references.md#references) | 📐 |
 | **pfSense** *(optional)* | Hybrid/on-prem firewall simulation | Outside the first EKS scenario | 📐 |

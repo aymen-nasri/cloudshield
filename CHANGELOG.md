@@ -2,6 +2,11 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- CI job `kind lab, scenario S1 end to end`: a three-node kind cluster with Calico runs `scripts/lab_e2e.py`. CloudShield quarantines a live pod as its responder service account, a probe pod confirms with real traffic that the pod is cut off and that rollback restores it, and five RBAC checks are refused by the API server. Run it locally with `make lab-e2e`.
+
 ## [0.2.0] - 2026-10-29
 
 More attack coverage, and the cross-layer link between a Kubernetes runtime alert and an AWS
