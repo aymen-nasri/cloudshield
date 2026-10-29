@@ -2,7 +2,10 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.2.0] - 2026-10-29
+
+More attack coverage, and the cross-layer link between a Kubernetes runtime alert and an AWS
+identity finding.
 
 ### Added
 - Replayable attack scenarios S2 (stolen pod credentials used outside AWS), S3 (Linux host compromise via Wazuh) and S6 (benign interactive shell); `tests/test_scenarios.py` replays every fixture against its `expected.yaml`.
@@ -44,4 +47,5 @@ code and in CI. It has not yet run on a real cluster or AWS account (see the REA
   Trivy image scan and SBOM, and infrastructure validation (tofu validate, helm lint, kubeconform,
   kyverno test, Ansible syntax check).
 
+[0.2.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.2.0
 [0.1.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.1.0
