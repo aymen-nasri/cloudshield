@@ -1,8 +1,8 @@
 """Correlation rules C-01..C-04.
 
 Rules are tried in order of specificity. An event joins the first open case that holds an
-event sharing the rule's key within the rule's time window. Cases never span accounts or
-clusters (C-04). If nothing matches, the event opens a new case (rule C-00).
+event sharing the rule's key within the rule's time window. Cases never span accounts or two
+different clusters (C-04). If nothing matches, the event opens a new case (rule C-00).
 """
 
 import threading
@@ -31,8 +31,15 @@ RULES: tuple[Rule, ...] = (
 
 
 def same_scope(case: Case, event: NormalizedEvent) -> bool:
-    """C-04: never merge across account or cluster boundaries."""
-    return case.account_id == event.account_id and case.cluster == event.cluster
+    """C-04: never merge across accounts or across two different clusters.
+
+    Account-level evidence has no cluster (an IAM finding, a CloudTrail call). It may join a
+    cluster's case in the same account; that is how stolen pod credentials used outside AWS meet
+    the pod alert that started it. Once a case has a cluster, events from another cluster never join.
+    """
+    if case.account_id != event.account_id:
+        return False
+    return case.cluster is None or event.cluster is None or case.cluster == event.cluster
 
 
 class CorrelationEngine:
@@ -69,6 +76,8 @@ class CorrelationEngine:
                             ),
                         )
                         case.add(event, link)
+                        if case.cluster is None and event.cluster:
+                            case.cluster = event.cluster  # the case is now scoped to that cluster
                         self.cases.save(case)
                         return case, link
 

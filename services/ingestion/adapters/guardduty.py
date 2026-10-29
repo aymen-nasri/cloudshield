@@ -33,6 +33,21 @@ def _dig(data: dict[str, Any], *path: str) -> Any:
     return data
 
 
+def principal_arn(account: str, access_key: dict[str, Any]) -> str | None:
+    """The IAM principal behind an access key, in the same ARN form enrichment uses for pod roles,
+    so an IAM finding and a pod alert about the same role meet in correlation rule C-03."""
+    user, kind = access_key.get("userName"), access_key.get("userType")
+    if kind == "Root":
+        return f"arn:aws:iam::{account}:root"
+    if not user:
+        return None
+    if kind == "AssumedRole":
+        return f"arn:aws:iam::{account}:role/{user}"
+    if kind == "IAMUser":
+        return f"arn:aws:iam::{account}:user/{user}"
+    return None
+
+
 class GuardDutyAdapter:
     name = "guardduty"
 
@@ -65,7 +80,10 @@ class GuardDutyAdapter:
         namespace = workload.get("namespace")
         pod_uid = workload.get("uid") if workload.get("type") == "pods" else None
         instance_id = _dig(resource, "instanceDetails", "instanceId")
-        principal = _dig(resource, "accessKeyDetails", "principalId")
+        access_key = resource.get("accessKeyDetails") or {}
+        principal = access_key.get("principalId")
+        arn = principal_arn(payload["account"], access_key)
+        api_call = _dig(detail, "service", "action", "awsApiCallAction") or {}
         event_time = parse_time(_dig(detail, "service", "eventLastSeen") or detail["updatedAt"])
         severity = _severity(float(detail["severity"]))
 
@@ -73,6 +91,8 @@ class GuardDutyAdapter:
             resource_id = f"k8s:{workload.get('type', 'workload')}/{namespace}/{workload['name']}"
         elif instance_id:
             resource_id = f"aws:ec2/{instance_id}"
+        elif arn and ":role/" in arn:
+            resource_id = f"aws:iam-role/{arn}"  # the same entity id enrichment gives a pod's role
         else:
             resource_id = None
 
@@ -90,7 +110,7 @@ class GuardDutyAdapter:
             event_type=f"guardduty.{detail['type']}",
             title=detail.get("title") or detail["type"],
             severity=SeverityInfo(normalized=severity, original=str(detail["severity"])),
-            keys=CorrelationKeys(pod_uid=pod_uid, instance_id=instance_id),
+            keys=CorrelationKeys(pod_uid=pod_uid, instance_id=instance_id, principal_arn=arn),
             raw_evidence_uri=raw_uri,
             checksum=checksum,
             ocsf={
@@ -113,6 +133,13 @@ class GuardDutyAdapter:
                 "metadata": {
                     "version": "1.3.0",
                     "product": {"name": "GuardDuty", "vendor_name": "AWS"},
+                },
+                "unmapped": {
+                    "api": api_call.get("api"),
+                    "service": api_call.get("serviceName"),
+                    "remote_ip": _dig(api_call, "remoteIpDetails", "ipAddressV4"),
+                    "user_name": access_key.get("userName"),
+                    "user_type": access_key.get("userType"),
                 },
             },
         )

@@ -51,9 +51,15 @@ class Unavailable(InvestigationError):
     status = 503
 
 
+def _kind(resource_id: str) -> str:
+    """`k8s:pod/shop/x` -> pod, `aws:iam-role/arn:...` -> iam-role, `host:web-01` -> host."""
+    prefix, _, rest = resource_id.partition(":")
+    return rest.split("/", 1)[0] if "/" in rest else prefix
+
+
 def _entities(resource_ids: list[str | None]) -> list[dict[str, str]]:
     seen = dict.fromkeys(r for r in resource_ids if r)
-    return [{"entity_id": r, "kind": r.split(":", 1)[1].split("/", 1)[0]} for r in seen]
+    return [{"entity_id": r, "kind": _kind(r)} for r in seen]
 
 
 class InvestigationService:

@@ -133,7 +133,8 @@ class PostgresCaseStore:
             conn.execute(
                 "INSERT INTO incident (id, title, status, account_id, cluster, opened_at)"
                 " VALUES (%s, %s, %s, %s, %s, %s)"
-                " ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, status = EXCLUDED.status",
+                " ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, status = EXCLUDED.status,"
+                " cluster = COALESCE(incident.cluster, EXCLUDED.cluster)",
                 (case.case_id, case.title, case.status, case.account_id, case.cluster, case.opened_at),
             )
             for link in case.links:
