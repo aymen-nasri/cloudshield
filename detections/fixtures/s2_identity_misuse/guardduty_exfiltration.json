@@ -20,7 +20,7 @@
     "resource": {
       "resourceType": "AccessKey",
       "accessKeyDetails": {
-        "accessKeyId": "ASIAEXAMPLEEXFIL0001",
+        "accessKeyId": "REDACTED",
         "principalId": "AROAEXAMPLEROLE00001:eks-shop-checkout",
         "userName": "shop-checkout-pod",
         "userType": "AssumedRole"
