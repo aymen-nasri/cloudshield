@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="746" height="704" viewBox="0 0 746 704" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5">
+<rect width="746" height="704" rx="8" fill="#0d1117"/>
+<circle cx="18" cy="16" r="5" fill="#ff5f56"/><circle cx="34" cy="16" r="5" fill="#ffbd2e"/><circle cx="50" cy="16" r="5" fill="#27c93f"/>
+<text x="728" y="20" fill="#6e7681" text-anchor="end">python scripts/lab_e2e.py</text>
+<text x="18" y="48" fill="#e6edf3" font-weight="bold" xml:space="preserve">CloudShield · scenario S1 on a real Kubernetes cluster (kind)</text>
+<text x="18" y="67" fill="#8b949e" xml:space="preserve">real API, cluster, RBAC and NetworkPolicies · no AWS (IAM role and EC2 stay unresolved)</text>
+<text x="18" y="86" fill="#c9d1d9" xml:space="preserve"></text>
+<text x="18" y="105" fill="#c9d1d9" xml:space="preserve">1  cluster  3 nodes, Calico, shop app with 3 checkout pods    -&gt; ready</text>
+<text x="18" y="124" fill="#8b949e" xml:space="preserve">            target checkout-5b768dfbd9-9j8kh (192.168.232.129) on cloudshield-lab-worker2</text>
+<text x="18" y="143" fill="#3fb950" xml:space="preserve">   traffic  probe -&gt; both checkout pods on 8080               -&gt; reachable</text>
+<text x="18" y="162" fill="#3fb950" xml:space="preserve">2  ingest   Falco: curl | sh in the target pod                -&gt; 202 accepted</text>
+<text x="18" y="181" fill="#c9d1d9" xml:space="preserve">3  case     1 event, severity medium                          -&gt; case_01M645J8C0CC149G0GZVJHCQKT</text>
+<text x="18" y="200" fill="#3fb950" xml:space="preserve">4  enrich   pod &gt; deployment &gt; service account &gt; node         -&gt; 3 entities</text>
+<text x="18" y="219" fill="#8b949e" xml:space="preserve">            read as cloudshield-investigator (read-only RBAC); IAM role and EC2: unresolved</text>
+<text x="18" y="238" fill="#c9d1d9" xml:space="preserve">5  propose  alice: quarantine the target pod                  -&gt; proposed</text>
+<text x="18" y="257" fill="#3fb950" xml:space="preserve">6  gate     dry run as the responder, then the policy gate    -&gt; awaiting_approval</text>
+<text x="18" y="276" fill="#8b949e" xml:space="preserve">            impact: pod keeps running, loses allow-dns, checkout-allow</text>
+<text x="18" y="295" fill="#c9d1d9" xml:space="preserve">7  approve  bob, incident responder                           -&gt; approved</text>
+<text x="18" y="314" fill="#3fb950" xml:space="preserve">8  execute  label the live pod as cloudshield-responder       -&gt; verified</text>
+<text x="18" y="333" fill="#8b949e" xml:space="preserve">            label_present                  ok</text>
+<text x="18" y="352" fill="#8b949e" xml:space="preserve">            default_deny_present           ok</text>
+<text x="18" y="371" fill="#8b949e" xml:space="preserve">            no_allow_policy_selects_pod    ok</text>
+<text x="18" y="390" fill="#8b949e" xml:space="preserve">            pod_preserved_for_forensics    ok</text>
+<text x="18" y="409" fill="#8b949e" xml:space="preserve">            egress_probe                   skipped</text>
+<text x="18" y="428" fill="#3fb950" xml:space="preserve">9  traffic  probe -&gt; quarantined pod                          -&gt; blocked</text>
+<text x="18" y="447" fill="#3fb950" xml:space="preserve">   traffic  probe -&gt; another checkout pod                     -&gt; reachable</text>
+<text x="18" y="466" fill="#3fb950" xml:space="preserve">   forensic quarantined pod still running                     -&gt; Running</text>
+<text x="18" y="485" fill="#3fb950" xml:space="preserve">10 rollback remove the label (proposed, approved, verified)   -&gt; verified</text>
+<text x="18" y="504" fill="#3fb950" xml:space="preserve">   traffic  probe -&gt; released pod                             -&gt; reachable</text>
+<text x="18" y="523" fill="#3fb950" xml:space="preserve">11 rbac     least privilege, checked against the API server   -&gt; 5/5 refused</text>
+<text x="18" y="542" fill="#8b949e" xml:space="preserve">            responder cannot delete the pod    403</text>
+<text x="18" y="561" fill="#8b949e" xml:space="preserve">            responder cannot read secrets      403</text>
+<text x="18" y="580" fill="#8b949e" xml:space="preserve">            responder cannot touch kube-system 403</text>
+<text x="18" y="599" fill="#8b949e" xml:space="preserve">            investigator cannot patch pods     403</text>
+<text x="18" y="618" fill="#8b949e" xml:space="preserve">            investigator cannot read secrets   403</text>
+<text x="18" y="637" fill="#3fb950" xml:space="preserve">12 audit    17 hash-chained records                           -&gt; chain intact</text>
+<text x="18" y="656" fill="#c9d1d9" xml:space="preserve"></text>
+<text x="18" y="675" fill="#3fb950" xml:space="preserve">all checks passed</text>
+</svg>
