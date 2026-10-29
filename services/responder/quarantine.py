@@ -135,16 +135,19 @@ def preview_quarantine(api: PodApi, target: Target) -> dict[str, Any]:
 class KubernetesPodApi:
     """PodApi backed by the official Kubernetes client (in-cluster config, responder service account)."""
 
-    def __init__(self) -> None:
+    def __init__(self, api_client: Any | None = None) -> None:
+        """`api_client` overrides the ambient config, e.g. to act as the responder service account."""
         from kubernetes import client, config
 
-        try:
-            config.load_incluster_config()
-        except config.ConfigException:
-            config.load_kube_config()
-        self._core = client.CoreV1Api()
-        self._net = client.NetworkingV1Api()
-        self._serialize = client.ApiClient().sanitize_for_serialization
+        if api_client is None:
+            try:
+                config.load_incluster_config()
+            except config.ConfigException:
+                config.load_kube_config()
+            api_client = client.ApiClient()
+        self._core = client.CoreV1Api(api_client)
+        self._net = client.NetworkingV1Api(api_client)
+        self._serialize = api_client.sanitize_for_serialization
 
     def get_pod(self, namespace: str, name: str) -> dict[str, Any] | None:
         from kubernetes.client.exceptions import ApiException

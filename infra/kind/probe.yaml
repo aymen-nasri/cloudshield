@@ -1,0 +1,25 @@
+# Test harness only: a curl pod labelled like the cart service, so the shop's NetworkPolicies let
+# it reach checkout pods on 8080. scripts/lab_e2e.py uses it to prove the quarantine cuts traffic.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probe
+  namespace: shop
+  labels: { app: cart, cloudshield.io/role: probe }
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    seccompProfile: { type: RuntimeDefault }
+  containers:
+    - name: curl
+      image: curlimages/curl:8.11.1
+      command: ["sleep", "86400"]
+      resources:
+        requests: { cpu: 10m, memory: 16Mi }
+        limits: { cpu: 100m, memory: 64Mi }
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: { drop: [ALL] }

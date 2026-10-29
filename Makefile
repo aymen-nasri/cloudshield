@@ -2,7 +2,7 @@ PYTHON ?= python3
 CLUSTER := cloudshield-lab
 CALICO_VERSION := v3.29.1
 
-.PHONY: install lint typecheck test schemas check infra-check lab-up lab-down core-up core-down demo console-demo demo-incident evals
+.PHONY: install lint typecheck test schemas check infra-check lab-up lab-e2e lab-down core-up core-down demo console-demo demo-incident evals
 
 install:
 	$(PYTHON) -m pip install -e ".[dev,aws,k8s,postgres]"
@@ -44,10 +44,14 @@ lab-up:
 	kubectl apply -f infra/k8s/demo-shop/shop.yaml
 	kubectl apply -f infra/policies/networkpolicies/shop.yaml
 	kubectl apply -f infra/policies/rbac/cloudshield-rbac.yaml
+	kubectl apply -f infra/kind/probe.yaml
 	helm repo add falcosecurity https://falcosecurity.github.io/charts --force-update
 	helm upgrade --install falco falcosecurity/falco -n falco --create-namespace \
 		-f infra/helm/falco-values.yaml \
 		--set-file 'customRules.cloudshield_rules\.yaml=detections/falco/cloudshield_rules.yaml'
+
+lab-e2e:
+	python scripts/lab_e2e.py
 
 lab-down:
 	kind delete cluster --name $(CLUSTER)
