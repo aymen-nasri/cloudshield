@@ -45,6 +45,10 @@ with grounded AI investigations and response actions that cannot bypass policy o
 
 <p align="center"><img src="docs/demo.svg" alt="Terminal output of scripts/demo.py: two alerts become one case, a quarantine is proposed, two unsafe approvals are refused, the approved action runs once and is verified, and the audit chain is intact" width="820"/></p>
 
+**The analyst console** (`python scripts/console_demo.py`, then open http://127.0.0.1:8090/console) is the incident page from the design, served by the API. Here a quarantine is waiting for approval: the facts cite their events, the affected pod is traced to its IAM role and EC2 instance, and the impact preview shows what the pod will lose.
+
+<p align="center"><img src="docs/console.png" alt="CloudShield analyst console: case list, AI synopsis with review buttons, affected entity chain from pod to IAM role and EC2 instance, timeline, cited facts and hypotheses, and a quarantine proposal with policy decision, impact preview and Approve and Reject buttons" width="860"/></p>
+
 ### Where to look in the code
 
 | If you want to see… | Start here |
@@ -988,7 +992,7 @@ spec:
 
 ## The analyst incident page
 
-The first five things an analyst sees are designed to answer *what happened, to what, how sure are we, and what is the safe move*.
+The first five things an analyst sees are designed to answer *what happened, to what, how sure are we, and what is the safe move*. This is the design; the [console](services/console/static/app.js) implements it (screenshot at the top of this README). It builds every element from text nodes, since alert text is attacker-controlled, and ships with a strict Content-Security-Policy.
 
 ```text
 CASE-0142 · Unexpected process in shop/checkout-7d9f6c-x2k8p       MEDIUM · AWAITING APPROVAL
@@ -1046,6 +1050,8 @@ COVERAGE   Falco ● ok    GuardDuty ● ok    Wazuh ● degraded (no heartbeat 
 | `GET` | `/v1/cases/{id}/report` | Incident report (Markdown / PDF) | `case:read` |
 | `GET` | `/v1/health/coverage` | Per-source heartbeat and coverage state | `ops:read` |
 | `GET` | `/v1/audit?case_id=` | Hash-chained audit records | `audit:read` |
+| `GET` | `/v1/me` | The signed-in analyst and roles | any analyst |
+| `GET` | `/console` | The analyst console (static page, strict CSP) | any analyst |
 
 Analysts use four roles: `viewer`, `analyst` (can propose), `incident-responder` (can propose, approve and execute) and `admin`. Nobody can approve their own proposal, approvals must quote the proposal hash they were shown, and execution re-checks both the approvals and the target. Today analysts authenticate with bearer tokens whose SHA-256 hashes are configured in `CLOUDSHIELD_ANALYSTS`; OIDC SSO replaces this later (M5).
 
@@ -1319,7 +1325,7 @@ cloudshield/
 │   ├── investigator/     # bundles, redaction, Bedrock client, prompt, citation validation
 │   ├── policy/           # deterministic policy engine, action allowlist, hash-bound approvals
 │   └── responder/        # quarantine executor and verifier, Lambda handler, Step Functions definition
-├── console/              # analyst web UI (M2)
+├── services/console/     # analyst console: one static page served by the API, strict CSP
 ├── schemas/              # JSON Schemas generated from the Pydantic contracts
 ├── runbooks/             # curated RAG corpus (Markdown)
 ├── detections/
@@ -1369,6 +1375,7 @@ cp .env.example .env # then set real values
 make core-up         # core API (applies migrations), PostgreSQL, OpenSearch (docker compose)
 set -a; . ./.env; set +a
 make demo-incident   # replays GuardDuty + Falco out of order; both land in one case
+make console-demo    # or: the console on demo data at http://127.0.0.1:8090/console
 curl localhost:8080/v1/cases
 docker compose restart core && curl localhost:8080/v1/cases   # the case survives a restart
 ```

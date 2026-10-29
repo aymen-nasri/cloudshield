@@ -36,6 +36,7 @@ where = ["services"]
 investigator = ["prompts/*.md"]
 policy = ["policies/*.yaml"]
 cases = ["migrations/*.sql"]
+console = ["static/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["services", "."]
