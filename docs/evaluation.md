@@ -24,7 +24,7 @@ CloudShield's benefits are claimed only once they have been **measured**. Each K
 
 | ID | Test | Expected behavior | Milestone | Status |
 |---|---|---|---|---|
-| T-01 | **Happy path** | Valid Falco alert → correct case → grounded report → approved action → verification | M4 | 🧪 (offline baseline model) |
+| T-01 | **Happy path** | Valid Falco alert → correct case → grounded report → approved action → verification | M4 | 🧪 (offline baseline model) · ✅ response half on kind in CI |
 | T-02 | **Duplicate delivery** | One source event produces exactly one canonical finding and case link | M2 | 🧪 |
 | T-03 | **Out-of-order events** | The timeline is rebuilt by event time, not arrival order | M2 | 🧪 |
 | T-04 | **Sensor outage** | Coverage is marked degraded; CloudShield doesn't report "all clear" | M2 | 🧪 |
