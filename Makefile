@@ -2,7 +2,7 @@ PYTHON ?= python3
 CLUSTER := cloudshield-lab
 CALICO_VERSION := v3.29.1
 
-.PHONY: install lint typecheck test schemas check infra-check lab-up lab-down core-up core-down demo demo-incident evals
+.PHONY: install lint typecheck test schemas check infra-check lab-up lab-down core-up core-down demo console-demo demo-incident evals
 
 install:
 	$(PYTHON) -m pip install -e ".[dev,aws,k8s,postgres]"
@@ -61,6 +61,9 @@ core-down:
 
 demo:
 	$(PYTHON) scripts/demo.py --svg docs/demo.svg
+
+console-demo:
+	$(PYTHON) scripts/console_demo.py
 
 demo-incident:
 	$(PYTHON) scripts/replay_fixture.py detections/fixtures/s1_suspicious_process

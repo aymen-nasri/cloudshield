@@ -13,6 +13,7 @@ from cases.audit import AuditLog, AuditStore
 from cases.router import build_router as build_cases_router
 from cases.store import CaseStore, InMemoryCaseStore
 from common.models import NormalizedEvent
+from console.router import build_router as build_console_router
 from core.auth import AnalystDirectory
 from correlation.engine import CorrelationEngine
 from enrichment.context import PodContext
@@ -66,6 +67,8 @@ class Settings:
     bedrock_model_id: str | None = None
     bedrock_guardrail_id: str | None = None
     runbooks_dir: Path | None = field(default_factory=lambda: _default_runbooks())
+    # Lab demos only: lets the console open signed in as this analyst token (see console/router.py).
+    console_demo_token: str | None = None
     analysts: AnalystDirectory = field(default_factory=lambda: AnalystDirectory({}))
     credentials: dict[str, SourceCredential] = field(default_factory=dict)
     max_silence: dict[str, timedelta] = field(
@@ -96,6 +99,7 @@ class Settings:
             investigator=os.getenv("CLOUDSHIELD_INVESTIGATOR"),
             bedrock_model_id=os.getenv("CLOUDSHIELD_BEDROCK_MODEL_ID"),
             bedrock_guardrail_id=os.getenv("CLOUDSHIELD_BEDROCK_GUARDRAIL_ID"),
+            console_demo_token=os.getenv("CLOUDSHIELD_CONSOLE_DEMO_TOKEN"),
             credentials=credentials,
         )
 
@@ -232,6 +236,7 @@ def create_app(
     app.include_router(build_cases_router(stores.cases, stores.audit, stores.entities))
     app.include_router(build_response_router(response, settings.analysts))
     app.include_router(build_investigation_router(investigations, settings.analysts))
+    app.include_router(build_console_router(settings.analysts, settings.console_demo_token))
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
