@@ -1,0 +1,15 @@
+scenario: S6
+title: Benign change (an on-call engineer opens a shell)
+description: >
+  A single low-severity Falco alert: an interactive bash shell in the checkout pod, with no
+  download, no new binary and no second detector. CloudShield opens a case and records it, but
+  the investigation recommends no containment: one uncorroborated low alert is not a reason to
+  disrupt a production workload.
+replay_order: [falco_alert.json]
+mitre: [T1609]
+expect:
+  cases: 1
+  links:
+    - { source: falco, rule: C-00 }
+  severity: low
+  containment: false

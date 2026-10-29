@@ -1,0 +1,21 @@
+{
+  "uuid": "3e9a1c57-2b8d-4f60-a7c4-9d1e5b3f8a26",
+  "time": "2026-10-28T11:30:15.220Z",
+  "rule": "Kubectl Exec Shell in Protected Workload",
+  "priority": "Notice",
+  "source": "syscall",
+  "hostname": "ip-10-20-3-41.eu-west-1.compute.internal",
+  "output": "Interactive shell in protected workload (user=node pod=checkout-7d9f6c-x2k8p ns=shop cmdline=bash)",
+  "output_fields": {
+    "proc.name": "bash",
+    "proc.cmdline": "bash",
+    "proc.tty": 34816,
+    "user.name": "node",
+    "k8s.ns.name": "shop",
+    "k8s.pod.name": "checkout-7d9f6c-x2k8p",
+    "k8s.pod.uid": "8b0e3c52-1d7a-4f43-9e6b-3a2c5d9f0e17",
+    "container.id": "3b0f9a1c2d4e",
+    "container.image.repository": "123456789012.dkr.ecr.eu-west-1.amazonaws.com/shop/checkout"
+  },
+  "tags": ["cloudshield", "mitre_execution", "T1609"]
+}

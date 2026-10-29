@@ -1,0 +1,19 @@
+{
+  "id": "1761641612.50433",
+  "timestamp": "2026-10-28T09:13:32.000+0000",
+  "rule": {
+    "id": "554",
+    "level": 7,
+    "description": "File added to the system.",
+    "groups": ["ossec", "syscheck", "syscheck_entry_added"],
+    "mitre": { "id": ["T1053.003"], "tactic": ["Persistence"] }
+  },
+  "agent": {
+    "id": "003",
+    "name": "web-01",
+    "ip": "10.20.3.50",
+    "labels": { "aws.instance_id": "i-0f1e2d3c4b5a69788" }
+  },
+  "syscheck": { "path": "/etc/cron.d/sys-update", "event": "added", "uname_after": "root" },
+  "full_log": "File '/etc/cron.d/sys-update' added"
+}

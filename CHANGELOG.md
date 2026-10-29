@@ -2,6 +2,16 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- Replayable attack scenarios S2 (stolen pod credentials used outside AWS), S3 (Linux host compromise via Wazuh) and S6 (benign interactive shell); `tests/test_scenarios.py` replays every fixture against its `expected.yaml`.
+- GuardDuty IAM findings carry the principal's ARN, so they correlate with pod alerts on the same role (C-03); Wazuh and GuardDuty evidence details reach the investigation.
+
+### Changed
+- C-04: account-level findings (no cluster) may join a cluster's case in the same account; two different clusters still never merge.
+- The offline baseline recommends containment only for corroborated evidence (two sources, or a high-severity finding), and lists missing evidence by resource type.
+
 ## [0.1.0] - 2026-10-29
 
 First release: the full detect → investigate → approve → contain → verify → report loop works in

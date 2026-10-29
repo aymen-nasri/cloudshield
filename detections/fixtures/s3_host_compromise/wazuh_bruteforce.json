@@ -1,0 +1,19 @@
+{
+  "id": "1761641105.48213",
+  "timestamp": "2026-10-28T09:05:05.000+0000",
+  "rule": {
+    "id": "5712",
+    "level": 10,
+    "description": "sshd: brute force trying to get access to the system. Non existent user.",
+    "groups": ["syslog", "sshd", "authentication_failures"],
+    "mitre": { "id": ["T1110"], "tactic": ["Credential Access"] }
+  },
+  "agent": {
+    "id": "003",
+    "name": "web-01",
+    "ip": "10.20.3.50",
+    "labels": { "aws.instance_id": "i-0f1e2d3c4b5a69788" }
+  },
+  "data": { "srcip": "198.51.100.77", "srcuser": "admin" },
+  "full_log": "Oct 28 09:05:05 web-01 sshd[2211]: Invalid user admin from 198.51.100.77 port 50122"
+}

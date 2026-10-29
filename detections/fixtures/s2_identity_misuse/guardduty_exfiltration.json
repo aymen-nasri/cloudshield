@@ -1,0 +1,48 @@
+{
+  "version": "0",
+  "id": "0b7e2d41-9c3a-4f1e-8d25-6a1f0c9e3b72",
+  "detail-type": "GuardDuty Finding",
+  "source": "aws.guardduty",
+  "account": "123456789012",
+  "time": "2026-10-28T14:21:30Z",
+  "region": "eu-west-1",
+  "resources": [],
+  "detail": {
+    "schemaVersion": "2.0",
+    "accountId": "123456789012",
+    "region": "eu-west-1",
+    "id": "e1f7a3c95b2d4e8f9a0c6b1d3e5f7a9c",
+    "type": "UnauthorizedAccess:IAMUser/InstanceCredentialExfiltration.OutsideAWS",
+    "title": "Credentials for the role shop-checkout-pod were used from an external IP address.",
+    "severity": 8.0,
+    "createdAt": "2026-10-28T14:21:10.000Z",
+    "updatedAt": "2026-10-28T14:21:10.000Z",
+    "resource": {
+      "resourceType": "AccessKey",
+      "accessKeyDetails": {
+        "accessKeyId": "REDACTED",
+        "principalId": "AROAEXAMPLEROLE00001:eks-shop-checkout",
+        "userName": "shop-checkout-pod",
+        "userType": "AssumedRole"
+      }
+    },
+    "service": {
+      "serviceName": "guardduty",
+      "eventFirstSeen": "2026-10-28T14:18:44.000Z",
+      "eventLastSeen": "2026-10-28T14:18:44.000Z",
+      "count": 1,
+      "action": {
+        "actionType": "AWS_API_CALL",
+        "awsApiCallAction": {
+          "api": "ListBuckets",
+          "serviceName": "s3.amazonaws.com",
+          "callerType": "Remote IP",
+          "remoteIpDetails": {
+            "ipAddressV4": "203.0.113.50",
+            "country": { "countryName": "Example" }
+          }
+        }
+      }
+    }
+  }
+}
