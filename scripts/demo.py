@@ -189,7 +189,7 @@ def run() -> Transcript:
 COLORS = {"title": "#e6edf3", "dim": "#8b949e", "good": "#3fb950", "bad": "#f0883e", "": "#c9d1d9"}
 
 
-def to_svg(transcript: Transcript) -> str:
+def to_svg(transcript: Transcript, command: str = "python scripts/demo.py") -> str:
     from html import escape
 
     line_h, pad, char_w = 19, 18, 7.4
@@ -208,7 +208,7 @@ def to_svg(transcript: Transcript) -> str:
         f'<rect width="{width}" height="{height}" rx="8" fill="#0d1117"/>\n'
         f'<circle cx="18" cy="16" r="5" fill="#ff5f56"/><circle cx="34" cy="16" r="5" fill="#ffbd2e"/>'
         f'<circle cx="50" cy="16" r="5" fill="#27c93f"/>\n'
-        f'<text x="{width - pad}" y="20" fill="#6e7681" text-anchor="end">python scripts/demo.py</text>\n'
+        f'<text x="{width - pad}" y="20" fill="#6e7681" text-anchor="end">{escape(command)}</text>\n'
         + "\n".join(rows)
         + "\n</svg>\n"
     )
