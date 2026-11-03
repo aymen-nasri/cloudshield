@@ -48,7 +48,9 @@ lab-up:
 	kubectl apply -f infra/kind/probe.yaml
 	kubectl create -f https://github.com/kyverno/kyverno/releases/download/$(KYVERNO_VERSION)/install.yaml
 	kubectl -n kyverno rollout status deploy/kyverno-admission-controller --timeout=300s
-	kubectl apply -f infra/policies/kyverno/require-quarantine-exclusion.yaml
+	for attempt in 1 2 3 4 5 6; do \
+		kubectl apply -f infra/policies/kyverno/require-quarantine-exclusion.yaml && break; sleep 10; \
+	done
 	helm repo add falcosecurity https://falcosecurity.github.io/charts --force-update
 	helm upgrade --install falco falcosecurity/falco -n falco --create-namespace \
 		-f infra/helm/falco-values.yaml \
