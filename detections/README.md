@@ -34,4 +34,4 @@ expect:
   containment: false
 ```
 
-Replay one scenario against a running API with `python scripts/replay_fixture.py`. Scenario S1 also runs against a live kind cluster on every pull request (`scripts/lab_e2e.py`).
+Replay one scenario against a running API with `python scripts/replay_fixture.py`. Scenario S1 also runs for real on every pull request: in the kind lab these rules catch a live `wget … | sh` in a checkout pod and Falcosidekick delivers the alert to CloudShield (`scripts/lab_e2e.py --alert falco`).
