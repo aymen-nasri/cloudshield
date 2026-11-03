@@ -171,7 +171,7 @@ jobs:
       - run: pip install -e ".[dev,k8s]"
       - name: Scenario S1 from a live Falco detection (real RBAC, real NetworkPolicies, real traffic)
         run: python scripts/lab_e2e.py --alert falco --admission --port "${WEBHOOK_PORT}" --svg lab-run.svg
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: lab-run
@@ -213,7 +213,7 @@ jobs:
           image-ref: cloudshield/core:${{ github.sha }}
           format: cyclonedx
           output: sbom.cdx.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom.cdx.json
