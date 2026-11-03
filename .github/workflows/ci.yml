@@ -118,6 +118,8 @@ jobs:
     needs: test
     env:
       CALICO_VERSION: v3.29.1 # matches the Makefile
+      FALCO_CHART_VERSION: 9.2.2
+      WEBHOOK_PORT: "8099"
     steps:
       - uses: actions/checkout@v4
       - uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
@@ -138,13 +140,28 @@ jobs:
           kubectl apply -f infra/kind/probe.yaml
           kubectl -n shop rollout status deploy/checkout --timeout=180s
           kubectl -n shop wait --for=condition=Ready pod/probe --timeout=120s
+      - name: Install Falco (modern eBPF) with Falcosidekick posting to CloudShield on the runner
+        run: |
+          # The kind network's gateway is the runner itself, where scripts/lab_e2e.py serves the API.
+          gateway=$(docker network inspect kind -f '{{range .IPAM.Config}}{{.Gateway}} {{end}}' | tr ' ' '\n' | grep -m1 '\.')
+          echo "webhook: http://${gateway}:${WEBHOOK_PORT}/v1/ingest/falco"
+          helm repo add falcosecurity https://falcosecurity.github.io/charts
+          # Pod and namespace names come from the container runtime, so the k8s metadata collector is off.
+          helm install falco falcosecurity/falco --version "${FALCO_CHART_VERSION}" -n falco --create-namespace \
+            -f infra/helm/falco-values.yaml \
+            --set collectors.kubernetes.enabled=false \
+            --set-file 'customRules.cloudshield_rules\.yaml=detections/falco/cloudshield_rules.yaml' \
+            --set falcosidekick.config.webhook.address="http://${gateway}:${WEBHOOK_PORT}/v1/ingest/falco" \
+            --set falcosidekick.config.webhook.customHeaders="Authorization:Bearer lab-falco-key" \
+            --wait --timeout 8m
+          kubectl -n falco get pods -o wide
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
       - run: pip install -e ".[dev,k8s]"
-      - name: Scenario S1 against the live cluster (real RBAC, real NetworkPolicies, real traffic)
-        run: python scripts/lab_e2e.py --svg lab-run.svg
+      - name: Scenario S1 from a live Falco detection (real RBAC, real NetworkPolicies, real traffic)
+        run: python scripts/lab_e2e.py --alert falco --port "${WEBHOOK_PORT}" --svg lab-run.svg
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -156,6 +173,8 @@ jobs:
         run: |
           kubectl get pods -A -o wide
           kubectl -n shop get networkpolicies,pods --show-labels
+          kubectl -n falco logs -l app.kubernetes.io/name=falco -c falco --tail=60 || true
+          kubectl -n falco logs -l app.kubernetes.io/name=falcosidekick --tail=60 || true
 
   image:
     name: build and scan image
