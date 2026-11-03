@@ -313,7 +313,7 @@ def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
 
     if admission:
         leaky, guarded = admission_check(client.NetworkingV1Api())
-        row("12", "admit", "Kyverno: allow-policy without the quarantine exclusion",
+        row("12", "admit", "Kyverno: allow-policy missing the exclusion",
             "rejected" if leaky else "ADMITTED", leaky)  # fmt: skip
         row("", "admit", "the same policy with the exclusion", "admitted" if guarded else "REJECTED", guarded)
         note("a leaky allow-policy would let a quarantined pod keep its traffic")

@@ -39,7 +39,7 @@ Status markers: ✅ built and tested · 🧩 written as code, not deployed · �
 | **Kubernetes RBAC** | Bounded cluster access by role and namespace | Read-only investigator identity; separate responder identity | ✅ refusals checked on kind in CI |
 | **EKS Pod Identity** | AWS permissions per service account | Scoped credential delivery [[R4]](references.md#references) | ✅ enrichment · 🧩 association |
 | **Trivy** | Vulnerability and misconfiguration scanning | CI reports and optional case enrichment | ✅ CI scan · 📐 case enrichment |
-| **Kyverno** | Admission policy, image verification | Policy reports; audit mode first, then enforce [[R13]](references.md#references) | ✅ policy tests · 🧩 admission |
+| **Kyverno** | Admission policy, image verification | Policy reports; audit mode first, then enforce [[R13]](references.md#references) | ✅ quarantine guard enforced on kind · 🧩 image verification |
 
 > **Falco and Wazuh are complementary, not interchangeable.** Falco is the primary source for container runtime behavior. Wazuh adds breadth for host and endpoint events. They can overlap, and the correlation engine treats them as distinct sources of evidence.
 

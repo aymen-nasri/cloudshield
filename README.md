@@ -66,7 +66,7 @@ What exists today, in one place. ✅ **built and tested** here · 🧩 **written
 | **Cases** | Correlation rules C-01 to C-04, timelines, entity graph, hash-chained audit log, PostgreSQL | — | OpenSearch search |
 | **AI investigation** | Cited, validated investigations; prompt-injection defenses; runbook retrieval; offline baseline model; evaluation harness | Bedrock client | A configured Bedrock Guardrail, vector search, a multi-step read-only agent |
 | **Response** | Policy gate, hash-bound expiring approvals, quarantine and rollback **on a live kind cluster with real traffic checks** | Step Functions + Lambda path for AWS | More actions: revoke IAM sessions, isolate an EC2 instance |
-| **Kubernetes** | Falco (modern eBPF) detecting a live attack in the lab, Calico NetworkPolicies, least-privilege RBAC checked against a live API server, Kyverno policy tests | Helm chart, EKS | Kyverno admission in the lab, Cilium/Hubble |
+| **Kubernetes** | Falco (modern eBPF) detecting a live attack in the lab, Calico NetworkPolicies, least-privilege RBAC checked against a live API server, Kyverno admission rejecting a leaky allow-policy | Helm chart, EKS | Cilium/Hubble |
 | **AWS** | GuardDuty findings, Pod Identity and EC2 lookups (against simulated AWS) | OpenTofu lab: VPC, EKS, GuardDuty, S3 Object Lock, KMS, budgets, GitHub OIDC | Lab bring-up on a real account |
 | **Delivery** | Tests on PostgreSQL, ruff, mypy, Gitleaks, Trivy, SBOM, infrastructure validation, kind end-to-end job | Cosign signing and ECR push | Dependency review, branch protection, Argo CD |
 | **Analyst tools** | Incident console, post-incident report | — | Chat approvals (Slack/Teams) |
@@ -145,7 +145,7 @@ CloudShield does **not** reinvent detection, a SIEM, or AWS's own AI investigati
 |---|---|---|
 | **AWS** | GuardDuty findings, EKS Pod Identity and EC2 lookups, S3 evidence store, SQS consumer | 🧩 VPC, EKS, IAM, EventBridge, S3 Object Lock, budgets, GitHub OIDC, Step Functions + Lambda, Bedrock client · 📐 CloudTrail, Security Hub, Secrets Manager |
 | **Linux** | Wazuh alert ingestion, the host-compromise scenario | 🧩 hardening and Wazuh enrolment with Ansible |
-| **Kubernetes** | Workload metadata, NetworkPolicy quarantine traffic-tested on kind, least-privilege RBAC checked live, Kyverno policy tests | 🧩 Helm chart, EKS · 📐 Kyverno admission in the lab |
+| **Kubernetes** | Workload metadata, NetworkPolicy quarantine traffic-tested on kind, least-privilege RBAC checked live, Kyverno admission enforced in the lab | 🧩 Helm chart, EKS |
 | **Networking** | Pod-to-pod policy and egress control with Calico | 🧩 VPC Flow Logs · 📐 Security Group isolation, Cilium/Hubble |
 | **Detection engineering** | Custom Falco rules firing on a live attack in the kind lab, five replayable attack scenarios, MITRE ATT&CK tagging | — |
 | **Data engineering** | OCSF normalization, idempotent ingestion, PostgreSQL modeling and migrations | 🧩 dead-letter queue · 📐 OpenSearch |
@@ -328,7 +328,6 @@ Designed and scheduled, not built yet. Each one moves to ✅ in the [Build statu
 
 | Feature | What it adds | Milestone |
 |---|---|---|
-| **Kyverno admission in the kind lab** | The cluster itself rejects an allow-policy that forgets the quarantine exclusion | M1 · next |
 | **Egress probe in the verifier** | CloudShield checks that the quarantined pod's traffic is blocked, instead of only checking policy state | M4 · next |
 | **Signed images on GitHub's registry** | Cosign keyless signatures on every image, verifiable without an AWS account | M1 · next |
 | **Dependency review and Dependabot** | Pull requests that add a known-vulnerable dependency are blocked | M1 · next |
