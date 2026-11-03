@@ -1,5 +1,6 @@
 # Every allow-policy in a protected namespace must exclude quarantined pods, otherwise the
-# quarantine label would silently stop working. Audit first, then switch to Enforce (M4).
+# quarantine label would silently stop working. Enforced: the kind lab job proves that the
+# API server rejects a leaky allow-policy (scripts/lab_e2e.py --admission).
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -26,7 +27,7 @@ spec:
           - resources:
               names: [default-deny-all]
       validate:
-        failureAction: Audit
+        failureAction: Enforce
         message: >-
           Add matchExpressions {key: cloudshield.io/quarantine, operator: NotIn, values: ["true"]}
           to spec.podSelector so quarantined pods fall back to default-deny.
