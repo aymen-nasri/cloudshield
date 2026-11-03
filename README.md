@@ -68,7 +68,7 @@ What exists today, in one place. ✅ **built and tested** here · 🧩 **written
 | **Response** | Policy gate, hash-bound expiring approvals, quarantine and rollback **on a live kind cluster with real traffic checks** | Step Functions + Lambda path for AWS | More actions: revoke IAM sessions, isolate an EC2 instance |
 | **Kubernetes** | Falco (modern eBPF) detecting a live attack in the lab, Calico NetworkPolicies, least-privilege RBAC checked against a live API server, Kyverno admission rejecting a leaky allow-policy | Helm chart, EKS | Cilium/Hubble |
 | **AWS** | GuardDuty findings, Pod Identity and EC2 lookups (against simulated AWS) | OpenTofu lab: VPC, EKS, GuardDuty, S3 Object Lock, KMS, budgets, GitHub OIDC | Lab bring-up on a real account |
-| **Delivery** | Tests on PostgreSQL, ruff, mypy, Gitleaks, Trivy, SBOM, infrastructure validation, kind end-to-end job | Cosign signing and ECR push | Dependency review, branch protection, Argo CD |
+| **Delivery** | Tests on PostgreSQL, ruff, mypy, Gitleaks, Trivy, SBOM, infrastructure validation, kind end-to-end job, dependency review, Dependabot | Cosign signing and ECR push | Branch protection, Argo CD |
 | **Analyst tools** | Incident console, post-incident report | — | Chat approvals (Slack/Teams) |
 | **Operations** | Sensor coverage heartbeat | Dead-letter queue alarm | Prometheus metrics, Grafana, OpenTelemetry |
 
@@ -152,7 +152,7 @@ CloudShield does **not** reinvent detection, a SIEM, or AWS's own AI investigati
 | **AI engineering** | Runbook retrieval, structured outputs, citation enforcement, prompt-injection defenses, evaluation harness | 🧩 Bedrock client · 📐 vector search, LangGraph, MCP |
 | **Software engineering** | FastAPI services, Pydantic contracts, state machines, hash-chained audit log, REST API and console | — |
 | **DevOps** | GitHub Actions, Docker, a kind cluster built and tested in CI | 🧩 OpenTofu, Helm, Ansible · 📐 Argo CD, Prometheus/Grafana, OpenTelemetry |
-| **DevSecOps** | Gitleaks, Trivy, SBOM, Kyverno policy tests, infrastructure validation | 🧩 Cosign signing, GitHub OIDC · 📐 dependency review, branch protection |
+| **DevSecOps** | Gitleaks, Trivy, SBOM, dependency review, Dependabot, Kyverno admission, infrastructure validation | 🧩 Cosign signing, GitHub OIDC · 📐 branch protection |
 
 > **How this goes beyond a typical SOC-automation lab:** a "Wazuh → SOAR → block IP" pipeline proves alert collection and automated containment. CloudShield goes further in three ways: **cross-layer resource context**, **investigation quality with provenance**, and **safety-aware, reversible, auditable response**.
 
@@ -330,7 +330,6 @@ Designed and scheduled, not built yet. Each one moves to ✅ in the [Build statu
 |---|---|---|
 | **Egress probe in the verifier** | CloudShield checks that the quarantined pod's traffic is blocked, instead of only checking policy state | M4 · next |
 | **Signed images on GitHub's registry** | Cosign keyless signatures on every image, verifiable without an AWS account | M1 · next |
-| **Dependency review and Dependabot** | Pull requests that add a known-vulnerable dependency are blocked | M1 · next |
 | **Prometheus metrics and a Grafana dashboard** | Ingest lag, queue depth, approval latency, model cost | M2 |
 | **AWS lab bring-up** | GuardDuty → EventBridge → SQS → CloudShield on a real account, with budget alarms | M1 |
 | **Bedrock with a Guardrail** | The evaluation harness scored against a real model before it is trusted | M3 |
@@ -399,7 +398,7 @@ cloudshield/
 ├── scripts/              # demo, kind lab run, console demo, fixture replay, schema export
 ├── tests/                # unit, API and negative policy tests
 ├── docs/                 # deep-dive pages, architecture decision records, sample report
-├── .github/workflows/    # CI: lint, typecheck, test, secret scan, image scan, SBOM, sign
+├── .github/              # CI (lint, tests, scans, SBOM, kind lab, sign), dependency review, Dependabot
 └── Makefile
 ```
 
