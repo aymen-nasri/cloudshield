@@ -128,6 +128,8 @@ jobs:
           install_only: true
       - name: Create the lab cluster (Calico, because kindnet does not enforce NetworkPolicy)
         run: |
+          # Falco, Kyverno and kind all use inotify; the runner's default of 128 instances runs out.
+          sudo sysctl -w fs.inotify.max_user_instances=1024 fs.inotify.max_user_watches=524288
           kind create cluster --config infra/kind/cluster.yaml
           kubectl apply -f "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml"
           kubectl -n kube-system rollout status ds/calico-node --timeout=300s
