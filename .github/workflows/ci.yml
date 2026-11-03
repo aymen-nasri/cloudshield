@@ -119,6 +119,7 @@ jobs:
     env:
       CALICO_VERSION: v3.29.1 # matches the Makefile
       FALCO_CHART_VERSION: 9.2.2
+      KYVERNO_VERSION: v1.19.2
       WEBHOOK_PORT: "8099"
     steps:
       - uses: actions/checkout@v4
@@ -140,6 +141,12 @@ jobs:
           kubectl apply -f infra/kind/probe.yaml
           kubectl -n shop rollout status deploy/checkout --timeout=180s
           kubectl -n shop wait --for=condition=Ready pod/probe --timeout=120s
+      - name: Install Kyverno and enforce the quarantine guard
+        run: |
+          kubectl create -f "https://github.com/kyverno/kyverno/releases/download/${KYVERNO_VERSION}/install.yaml"
+          kubectl -n kyverno rollout status deploy/kyverno-admission-controller --timeout=300s
+          kubectl apply -f infra/policies/kyverno/require-quarantine-exclusion.yaml
+          kubectl wait --for=condition=Ready clusterpolicy/require-quarantine-exclusion --timeout=120s
       - name: Install Falco (modern eBPF) with Falcosidekick posting to CloudShield on the runner
         run: |
           # The kind network's gateway is the runner itself, where scripts/lab_e2e.py serves the API.
@@ -161,7 +168,7 @@ jobs:
           cache: pip
       - run: pip install -e ".[dev,k8s]"
       - name: Scenario S1 from a live Falco detection (real RBAC, real NetworkPolicies, real traffic)
-        run: python scripts/lab_e2e.py --alert falco --port "${WEBHOOK_PORT}" --svg lab-run.svg
+        run: python scripts/lab_e2e.py --alert falco --admission --port "${WEBHOOK_PORT}" --svg lab-run.svg
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -173,6 +180,7 @@ jobs:
         run: |
           kubectl get pods -A -o wide
           kubectl -n shop get networkpolicies,pods --show-labels
+          kubectl get clusterpolicies || true
           kubectl -n falco logs -l app.kubernetes.io/name=falco -c falco --tail=60 || true
           kubectl -n falco logs -l app.kubernetes.io/name=falcosidekick --tail=60 || true
 

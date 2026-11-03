@@ -15,6 +15,7 @@ Exits non-zero if any check fails, so CI can run it on every pull request.
 """
 
 import argparse
+import copy
 import json
 import logging
 import os
@@ -33,6 +34,7 @@ sys.path.insert(0, str(ROOT / "services"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import uvicorn  # noqa: E402
+import yaml  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from kubernetes import client, config  # noqa: E402
 from kubernetes.client.exceptions import ApiException  # noqa: E402
@@ -46,6 +48,9 @@ from responder.executor import KubernetesExecutor  # noqa: E402
 from responder.quarantine import KubernetesPodApi  # noqa: E402
 
 FIXTURE = ROOT / "detections" / "fixtures" / "s1_suspicious_process" / "falco_alert.json"
+LEAKY = (
+    ROOT / "infra" / "policies" / "kyverno" / "tests" / "require-quarantine-exclusion" / "leaky-allow.yaml"
+)
 CLUSTER, NS, PROBE = "kind-cloudshield-lab", "shop", "probe"
 
 
@@ -138,7 +143,36 @@ def case_for(api: TestClient, pod_id: str, event_type: str, *, timeout: float) -
         time.sleep(2)
 
 
-def run(alert: str, port: int) -> tuple[Transcript, list[str]]:
+def admission_check(net: Any) -> tuple[bool, bool]:
+    """Ask the API server to admit two allow-policies (dry run): Kyverno must reject the leaky one.
+
+    Retries briefly, because a just-applied Kyverno policy takes a moment to reach the webhook.
+    """
+    leaky = yaml.safe_load(LEAKY.read_text(encoding="utf-8"))
+    leaky["metadata"]["name"] = "lab-leaky-allow"
+    guarded = copy.deepcopy(leaky)
+    guarded["metadata"]["name"] = "lab-guarded-allow"
+    guarded["spec"]["podSelector"]["matchExpressions"] = [
+        {"key": "cloudshield.io/quarantine", "operator": "NotIn", "values": ["true"]}
+    ]
+    rejected = False
+    for _ in range(10):
+        try:
+            net.create_namespaced_network_policy(NS, leaky, dry_run="All")
+        except ApiException as exc:
+            rejected = exc.status in (400, 403) and "require-quarantine-exclusion" in (exc.body or "")
+        if rejected:
+            break
+        time.sleep(3)
+    try:
+        net.create_namespaced_network_policy(NS, guarded, dry_run="All")
+        admitted = True
+    except ApiException:
+        admitted = False
+    return rejected, admitted
+
+
+def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
     out, failures = Transcript(), []
     config.load_kube_config()
     admin = client.CoreV1Api()
@@ -277,10 +311,17 @@ def run(alert: str, port: int) -> tuple[Transcript, list[str]]:
     for name, refused in checks.items():
         note(f"{name:<34} {'403' if refused else 'ALLOWED'}")
 
+    if admission:
+        leaky, guarded = admission_check(client.NetworkingV1Api())
+        row("12", "admit", "Kyverno: allow-policy without the quarantine exclusion",
+            "rejected" if leaky else "ADMITTED", leaky)  # fmt: skip
+        row("", "admit", "the same policy with the exclusion", "admitted" if guarded else "REJECTED", guarded)
+        note("a leaky allow-policy would let a quarantined pod keep its traffic")
+
     audit = api.get("/v1/audit", params={"case_id": case["case_id"]}).json()
     intact = audit["chain_intact"]
     chain = "chain intact" if intact else "BROKEN"
-    row("12", "audit", f"{len(audit['records'])} hash-chained records", chain, intact)
+    row("13" if admission else "12", "audit", f"{len(audit['records'])} hash-chained records", chain, intact)
     out.say("")
     verdict = f"{len(failures)} check(s) FAILED" if failures else "all checks passed"
     out.say(verdict, "bad" if failures else "good")
@@ -297,9 +338,14 @@ def main() -> int:
         help="replay the S1 alert, or attack the pod and wait for Falco's real alert",
     )
     parser.add_argument("--port", type=int, default=8099, help="webhook port for Falcosidekick (falco mode)")
+    parser.add_argument(
+        "--admission",
+        action="store_true",
+        help="also check that Kyverno rejects a leaky allow-policy (needs Kyverno installed)",
+    )
     args = parser.parse_args()
     logging.getLogger("enrichment.context").setLevel(logging.ERROR)  # the expected "no AWS" warnings
-    transcript, failures = run(args.alert, args.port)
+    transcript, failures = run(args.alert, args.port, args.admission)
     text = "\n".join(t for _, t in transcript.lines)
     if summary := os.getenv("GITHUB_STEP_SUMMARY"):
         with open(summary, "a", encoding="utf-8") as f:
