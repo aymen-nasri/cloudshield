@@ -6,10 +6,10 @@ Back to the [project README](../README.md). Status markers: ✅ built and tested
 
 | Folder | What it defines | Status | Checked by |
 |---|---|---|---|
-| [`kind/`](kind) | The three-node lab cluster (Calico instead of kindnet, so NetworkPolicies are enforced) and a curl probe pod used to test traffic | ✅ | the `kind lab` CI job |
+| [`kind/`](kind) | The three-node lab cluster (Calico instead of kindnet, so NetworkPolicies are enforced) and the curl probe pod the verifier tests traffic from | ✅ | the `kind lab` CI job |
 | [`k8s/demo-shop/`](k8s/demo-shop) | The protected demo app: `checkout` and `cart` services in the `shop` namespace, Pod Security `restricted` | ✅ | kubeconform, the `kind lab` CI job |
 | [`policies/networkpolicies/`](policies/networkpolicies) | Default-deny plus allow-policies that each exclude `cloudshield.io/quarantine=true`, so one label quarantines a pod | ✅ traffic-tested | the `kind lab` CI job |
-| [`policies/rbac/`](policies/rbac) | Two identities with no overlap: a read-only investigator and a responder that may only patch pods in `shop` | ✅ refusals tested | the `kind lab` CI job |
+| [`policies/rbac/`](policies/rbac) | Three identities with no overlap: a read-only investigator, a responder that may only patch pods in `shop`, and a prober that may only exec into the probe pod | ✅ refusals tested | the `kind lab` CI job |
 | [`policies/kyverno/`](policies/kyverno) | Admission rules: every allow-policy must keep the quarantine exclusion; only signed CloudShield images may run | ✅ quarantine guard enforced in the lab · 🧩 image verification | `kyverno test` in CI; the `kind lab` job checks a leaky policy is rejected |
 | [`helm/`](helm) | The CloudShield chart, and the Falco values that load CloudShield's custom rules | 🧩 chart · ✅ Falco values | `helm lint`, kubeconform; the `kind lab` job installs Falco with these values |
 | [`ansible/`](ansible) | Linux host hardening, Wazuh agent enrolment and the signed Wazuh → CloudShield integration | 🧩 | `ansible-playbook --syntax-check` |
