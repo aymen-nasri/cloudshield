@@ -65,7 +65,7 @@ What exists today, in one place. ✅ **built and tested** here · 🧩 **written
 | **Ingestion** | Falco, GuardDuty and Wazuh adapters to OCSF; fail-closed producer auth; dedup; raw evidence with SHA-256; sensor coverage | EventBridge → SQS → consumer in AWS | CloudTrail, Security Hub and VPC Flow Logs ingestion |
 | **Cases** | Correlation rules C-01 to C-04, timelines, entity graph, hash-chained audit log, PostgreSQL | — | OpenSearch search |
 | **AI investigation** | Cited, validated investigations; prompt-injection defenses; runbook retrieval; offline baseline model; evaluation harness | Bedrock client | A configured Bedrock Guardrail, vector search, a multi-step read-only agent |
-| **Response** | Policy gate, hash-bound expiring approvals, quarantine and rollback **on a live kind cluster with real traffic checks** | Step Functions + Lambda path for AWS | More actions: revoke IAM sessions, isolate an EC2 instance |
+| **Response** | Policy gate, hash-bound expiring approvals, quarantine and rollback **on a live kind cluster**, verified by CloudShield's own traffic probe | Step Functions + Lambda path for AWS | More actions: revoke IAM sessions, isolate an EC2 instance |
 | **Kubernetes** | Falco (modern eBPF) detecting a live attack in the lab, Calico NetworkPolicies, least-privilege RBAC checked against a live API server, Kyverno admission rejecting a leaky allow-policy | Helm chart, EKS | Cilium/Hubble |
 | **AWS** | GuardDuty findings, Pod Identity and EC2 lookups (against simulated AWS) | OpenTofu lab: VPC, EKS, GuardDuty, S3 Object Lock, KMS, budgets, GitHub OIDC | Lab bring-up on a real account |
 | **Delivery** | Tests on PostgreSQL, ruff, mypy, Gitleaks, Trivy, SBOM, infrastructure validation, kind end-to-end job, dependency review, Dependabot | Cosign signing and ECR push | Branch protection, Argo CD |
@@ -274,7 +274,7 @@ sequenceDiagram
     An->>Exe: approve (bound to proposal hash, 15-minute TTL)
     Exe->>Pod: apply quarantine label (idempotency key)
     Exe->>Ver: execution result
-    Ver->>Pod: check label, policy and blocked egress
+    Ver->>Pod: check label, policy and that an allowed peer is now blocked
     Ver-->>An: verified outcome + incident report
 ```
 
@@ -328,7 +328,6 @@ Designed and scheduled, not built yet. Each one moves to ✅ in the [Build statu
 
 | Feature | What it adds | Milestone |
 |---|---|---|
-| **Egress probe in the verifier** | CloudShield checks that the quarantined pod's traffic is blocked, instead of only checking policy state | M4 · next |
 | **Signed images on GitHub's registry** | Cosign keyless signatures on every image, verifiable without an AWS account | M1 · next |
 | **Prometheus metrics and a Grafana dashboard** | Ingest lag, queue depth, approval latency, model cost | M2 |
 | **AWS lab bring-up** | GuardDuty → EventBridge → SQS → CloudShield on a real account, with budget alarms | M1 |
