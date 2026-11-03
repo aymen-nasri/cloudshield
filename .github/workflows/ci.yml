@@ -229,7 +229,7 @@ jobs:
       id-token: write # GitHub OIDC: short-lived AWS credentials and keyless Cosign signing
     steps:
       - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
