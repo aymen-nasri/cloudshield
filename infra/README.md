@@ -11,7 +11,7 @@ Back to the [project README](../README.md). Status markers: ✅ built and tested
 | [`policies/networkpolicies/`](policies/networkpolicies) | Default-deny plus allow-policies that each exclude `cloudshield.io/quarantine=true`, so one label quarantines a pod | ✅ traffic-tested | the `kind lab` CI job |
 | [`policies/rbac/`](policies/rbac) | Two identities with no overlap: a read-only investigator and a responder that may only patch pods in `shop` | ✅ refusals tested | the `kind lab` CI job |
 | [`policies/kyverno/`](policies/kyverno) | Admission rules: every allow-policy must keep the quarantine exclusion; only signed CloudShield images may run | ✅ policy tests · 📐 admission in the lab | `kyverno test` in CI |
-| [`helm/`](helm) | The CloudShield chart and the Falco values with CloudShield's custom rules | 🧩 | `helm lint`, kubeconform |
+| [`helm/`](helm) | The CloudShield chart, and the Falco values that load CloudShield's custom rules | 🧩 chart · ✅ Falco values | `helm lint`, kubeconform; the `kind lab` job installs Falco with these values |
 | [`ansible/`](ansible) | Linux host hardening, Wazuh agent enrolment and the signed Wazuh → CloudShield integration | 🧩 | `ansible-playbook --syntax-check` |
 | [`tofu/envs/lab/`](tofu/envs/lab) | The AWS lab: VPC with flow logs, EKS with Pod Identity, GuardDuty → EventBridge → SQS with a dead-letter alarm, S3 evidence bucket with Object Lock and KMS, ECR, budgets, GitHub OIDC role | 🧩 | `tofu fmt`, `tofu validate` |
 
