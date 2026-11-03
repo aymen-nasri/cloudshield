@@ -16,6 +16,7 @@ spec:
       verifyImages:
         - failureAction: Audit
           imageReferences:
+            - "ghcr.io/aymen-nasri/cloudshield*"
             - "*.dkr.ecr.*.amazonaws.com/cloudshield/*"
           attestors:
             - entries:
