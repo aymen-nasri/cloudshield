@@ -40,7 +40,7 @@ with grounded AI investigations and response actions that cannot bypass policy o
 | **Evidence it works** | 160+ automated tests in CI (including PostgreSQL and policy-bypass tests), infrastructure validated in CI with OpenTofu, Helm, kubeconform and Kyverno, the replayable demo below, and scenario S1 on a live kind cluster on every pull request |
 | **Status** | The detect → case → investigate → approve → contain → verify → report loop works in code and in CI, and its Kubernetes half runs on a real kind cluster on every pull request. It has **not yet run on EKS, an AWS account or Bedrock** (see [Roadmap](#roadmap)) |
 
-**Reading this README:** it describes the target design and marks what exists: ✅ **built**, implemented and tested here · 🧩 **as code**, written (OpenTofu, Helm, Step Functions definition, CI job) but never deployed · 📐 **designed**, documented only.
+**Reading this README:** it describes the full design. The [Build status](#build-status) table below says what is built, what is written as code, and what is planned.
 
 ### See it run
 
@@ -55,6 +55,24 @@ with grounded AI investigations and response actions that cannot bypass policy o
 **The analyst console** (`python scripts/console_demo.py`, then open http://127.0.0.1:8090/console) is the incident page from the design, served by the API. Here a quarantine is waiting for approval: the facts cite their events, the affected pod is traced to its IAM role and EC2 instance, and the impact preview shows what the pod will lose.
 
 <p align="center"><img src="docs/console.png" alt="CloudShield analyst console: case list, AI synopsis with review buttons, affected entity chain from pod to IAM role and EC2 instance, timeline, cited facts and hypotheses, and a quarantine proposal with policy decision, impact preview and Approve and Reject buttons" width="860"/></p>
+
+### Build status
+
+What exists today, in one place. ✅ **built and tested** here · 🧩 **written as code**, validated in CI but not deployed · 📐 **planned**, designed and documented only.
+
+| Area | ✅ Built and tested | 🧩 Written as code | 📐 Planned |
+|---|---|---|---|
+| **Ingestion** | Falco, GuardDuty and Wazuh adapters to OCSF; fail-closed producer auth; dedup; raw evidence with SHA-256; sensor coverage | EventBridge → SQS → consumer in AWS | CloudTrail, Security Hub and VPC Flow Logs ingestion |
+| **Cases** | Correlation rules C-01 to C-04, timelines, entity graph, hash-chained audit log, PostgreSQL | — | OpenSearch search |
+| **AI investigation** | Cited, validated investigations; prompt-injection defenses; runbook retrieval; offline baseline model; evaluation harness | Bedrock client | A configured Bedrock Guardrail, vector search, a multi-step read-only agent |
+| **Response** | Policy gate, hash-bound expiring approvals, quarantine and rollback **on a live kind cluster with real traffic checks** | Step Functions + Lambda path for AWS | More actions: revoke IAM sessions, isolate an EC2 instance |
+| **Kubernetes** | Calico NetworkPolicies, least-privilege RBAC checked against a live API server, Kyverno policy tests | Helm chart, EKS | Kyverno admission and Falco running in the lab, Cilium/Hubble |
+| **AWS** | GuardDuty findings, Pod Identity and EC2 lookups (against simulated AWS) | OpenTofu lab: VPC, EKS, GuardDuty, S3 Object Lock, KMS, budgets, GitHub OIDC | Lab bring-up on a real account |
+| **Delivery** | Tests on PostgreSQL, ruff, mypy, Gitleaks, Trivy, SBOM, infrastructure validation, kind end-to-end job | Cosign signing and ECR push | Dependency review, branch protection, Argo CD |
+| **Analyst tools** | Incident console, post-incident report | — | Chat approvals (Slack/Teams) |
+| **Operations** | Sensor coverage heartbeat | Dead-letter queue alarm | Prometheus metrics, Grafana, OpenTelemetry |
+
+The deep-dive pages in [`docs/`](docs) use the same markers in every technology table. What is planned next is in the [Roadmap](#roadmap).
 
 ### Where to look, by role
 
@@ -123,18 +141,18 @@ CloudShield does **not** reinvent detection, a SIEM, or AWS's own AI investigati
 
 ## Skills this project demonstrates
 
-| Domain | What CloudShield exercises |
-|---|---|
-| **AWS** | ✅ GuardDuty findings, EKS Pod Identity and EC2 lookups, S3 evidence store, SQS consumer · 🧩 VPC, EKS, IAM, EventBridge, S3 Object Lock, budgets, GitHub OIDC (OpenTofu), Step Functions + Lambda (definition and handler), Bedrock client · 📐 CloudTrail, Security Hub, Secrets Manager |
-| **Linux** | ✅ Wazuh alert ingestion and the host-compromise scenario · 🧩 host hardening and Wazuh enrolment with Ansible |
-| **Kubernetes** | ✅ workload metadata, NetworkPolicy quarantine traffic-tested on kind, least-privilege RBAC checked against a live API server, Kyverno policy tests · 🧩 Helm chart, EKS |
-| **Networking** | ✅ pod-to-pod policy and egress control in the quarantine · 🧩 VPC Flow Logs enabled in OpenTofu · 📐 Security Group isolation, eBPF visibility (Cilium/Hubble) |
-| **Detection engineering** | ✅ custom Falco rules, five replayable attack scenarios tested in CI, MITRE ATT&CK tagging |
-| **Data engineering** | ✅ OCSF normalization, idempotent ingestion, PostgreSQL modeling and migrations · 🧩 dead-letter queue · 📐 OpenSearch indexing |
-| **AI engineering** | ✅ runbook retrieval, structured outputs, citation enforcement, prompt-injection defenses, evaluation harness · 🧩 Bedrock client · 📐 vector search, LangGraph, MCP |
-| **Software engineering** | ✅ FastAPI services, Pydantic contracts, state machines, hash-chained audit log, REST API and console |
-| **DevOps** | ✅ GitHub Actions, Docker · 🧩 OpenTofu, Helm, Ansible · 📐 GitOps (Argo CD), Prometheus/Grafana, OpenTelemetry |
-| **DevSecOps** | ✅ Gitleaks, Trivy, SBOM, Kyverno tests, infrastructure validation · 🧩 Cosign signing and ECR push (CI job skips until AWS is configured), GitHub OIDC · 📐 branch protection, dependency review |
+| Domain | Built and tested here | Written as code (🧩) or planned (📐) |
+|---|---|---|
+| **AWS** | GuardDuty findings, EKS Pod Identity and EC2 lookups, S3 evidence store, SQS consumer | 🧩 VPC, EKS, IAM, EventBridge, S3 Object Lock, budgets, GitHub OIDC, Step Functions + Lambda, Bedrock client · 📐 CloudTrail, Security Hub, Secrets Manager |
+| **Linux** | Wazuh alert ingestion, the host-compromise scenario | 🧩 hardening and Wazuh enrolment with Ansible |
+| **Kubernetes** | Workload metadata, NetworkPolicy quarantine traffic-tested on kind, least-privilege RBAC checked live, Kyverno policy tests | 🧩 Helm chart, EKS · 📐 Kyverno admission and Falco in the lab |
+| **Networking** | Pod-to-pod policy and egress control with Calico | 🧩 VPC Flow Logs · 📐 Security Group isolation, Cilium/Hubble |
+| **Detection engineering** | Custom Falco rules, five replayable attack scenarios, MITRE ATT&CK tagging | 📐 live Falco detections in the lab |
+| **Data engineering** | OCSF normalization, idempotent ingestion, PostgreSQL modeling and migrations | 🧩 dead-letter queue · 📐 OpenSearch |
+| **AI engineering** | Runbook retrieval, structured outputs, citation enforcement, prompt-injection defenses, evaluation harness | 🧩 Bedrock client · 📐 vector search, LangGraph, MCP |
+| **Software engineering** | FastAPI services, Pydantic contracts, state machines, hash-chained audit log, REST API and console | — |
+| **DevOps** | GitHub Actions, Docker, a kind cluster built and tested in CI | 🧩 OpenTofu, Helm, Ansible · 📐 Argo CD, Prometheus/Grafana, OpenTelemetry |
+| **DevSecOps** | Gitleaks, Trivy, SBOM, Kyverno policy tests, infrastructure validation | 🧩 Cosign signing, GitHub OIDC · 📐 dependency review, branch protection |
 
 > **How this goes beyond a typical SOC-automation lab:** a "Wazuh → SOAR → block IP" pipeline proves alert collection and automated containment. CloudShield goes further in three ways: **cross-layer resource context**, **investigation quality with provenance**, and **safety-aware, reversible, auditable response**.
 
@@ -304,11 +322,32 @@ The roadmap is ordered by **learning and risk reduction**, not by the number of 
 
 **One** protected test workload + **one** runtime detector + **one** cloud context source + **one** evidence and case backend + **one** LLM investigator + **one** human approval gate + **one** reversible response + **one** verification report.
 
+### Planned features
+
+Designed and scheduled, not built yet. Each one moves to ✅ in the [Build status](#build-status) table only when it runs in CI or in a lab.
+
+| Feature | What it adds | Milestone |
+|---|---|---|
+| **Falco in the kind lab** | A real `curl \| sh` in the pod is detected, sent through Falcosidekick and quarantined, with no fixture involved | M1 · next |
+| **Kyverno admission in the kind lab** | The cluster itself rejects an allow-policy that forgets the quarantine exclusion | M1 · next |
+| **Egress probe in the verifier** | CloudShield checks that the quarantined pod's traffic is blocked, instead of only checking policy state | M4 · next |
+| **Signed images on GitHub's registry** | Cosign keyless signatures on every image, verifiable without an AWS account | M1 · next |
+| **Dependency review and Dependabot** | Pull requests that add a known-vulnerable dependency are blocked | M1 · next |
+| **Prometheus metrics and a Grafana dashboard** | Ingest lag, queue depth, approval latency, model cost | M2 |
+| **AWS lab bring-up** | GuardDuty → EventBridge → SQS → CloudShield on a real account, with budget alarms | M1 |
+| **Bedrock with a Guardrail** | The evaluation harness scored against a real model before it is trusted | M3 |
+| **OpenSearch** | Search across events, and similar past cases for the investigator | M2 |
+| **Security Hub and CloudTrail ingestion** | Wider AWS coverage through the same adapters and correlation rules | M5 |
+| **More response actions** | Revoke an IAM role's sessions; isolate an EC2 instance with a Security Group | M5 |
+| **Cilium and Hubble** | Network flow evidence for the unexpected-egress scenario (S4) | M5 |
+| **Approvals from Slack or Teams** | Approve from chat, still bound to the proposal hash and the approver's role | M5 |
+| **Multi-step read-only agent** | Deeper investigations with LangGraph and MCP tools, still without write access | M5 |
+
 ---
 
 ## Documentation
 
-The deep dives behind this page. Every technology table carries the same ✅ / 🧩 / 📐 status markers.
+The deep dives behind this page. Every technology table carries the same ✅ / 🧩 / 📐 status markers as the [Build status](#build-status) table.
 
 | Page | What's in it |
 |---|---|
@@ -323,6 +362,8 @@ The deep dives behind this page. Every technology table carries the same ✅ / �
 | [Architecture decision records](docs/adr) | Correlation, quarantine by label, the LLM's closed action vocabulary, the lab account |
 | [Sample incident report](docs/sample-incident-report.md) | A report generated from scenario S1 |
 | [References](docs/references.md) | Sources cited across the documentation |
+
+Each main folder also has a short guide: [`services/`](services/README.md) (one row per package, with its tests) · [`infra/`](infra/README.md) · [`detections/`](detections/README.md) · [`scripts/`](scripts/README.md) · [`runbooks/`](runbooks/README.md) · [`evals/`](evals/README.md).
 
 ---
 
