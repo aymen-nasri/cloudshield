@@ -7,8 +7,15 @@ import pytest
 
 from common.models import ResponseProposal, Target
 from policy.approvals import proposal_hash
+from responder import quarantine
 from responder.lambda_handlers import ApprovalMismatch, handler
-from responder.quarantine import QUARANTINE_LABEL, apply_quarantine, remove_quarantine, verify_quarantine
+from responder.quarantine import (
+    QUARANTINE_LABEL,
+    apply_quarantine,
+    remove_quarantine,
+    verify_quarantine,
+    verify_release,
+)
 
 TARGET = Target(kind="Pod", name="checkout-1", uid="uid-1", namespace="shop")
 
@@ -84,7 +91,7 @@ def test_verification_passes_after_quarantine():
     report = verify_quarantine(api, TARGET)
     assert report.passed
     assert report.checks["no_allow_policy_selects_pod"] is True
-    assert report.checks["egress_probe"] is None  # reported as skipped, not as passed
+    assert report.checks["traffic_probe"] is None  # no probe configured: skipped, not passed
 
 
 def test_verification_fails_when_an_allow_policy_lacks_the_exclusion():
@@ -100,6 +107,55 @@ def test_rollback_removes_the_label():
     apply_quarantine(api, TARGET, dry_run=False)
     assert remove_quarantine(api, TARGET, dry_run=False).status == "removed"
     assert QUARANTINE_LABEL not in api.pod["metadata"]["labels"]
+
+
+class FakeProbe:
+    """Answers in turn from a script of results; None means the probe could not run."""
+
+    def __init__(self, *answers):
+        self.answers, self.calls = list(answers), []
+
+    def can_connect(self, ip, port):
+        self.calls.append((ip, port))
+        return self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
+
+
+@pytest.fixture
+def probed_api(monkeypatch):
+    monkeypatch.setattr(quarantine, "PROBE_WAIT_SECONDS", 0)
+    api = FakePodApi()
+    api.pod["status"]["podIP"] = "10.0.0.7"
+    api.pod["spec"] = {"containers": [{"name": "checkout", "ports": [{"containerPort": 8080}]}]}
+    return api
+
+
+def test_traffic_probe_passes_once_the_peer_is_blocked(probed_api):
+    apply_quarantine(probed_api, TARGET, dry_run=False)
+    probe = FakeProbe(True, False)  # the CNI needs a moment, then the connection fails
+    report = verify_quarantine(probed_api, TARGET, probe)
+    assert report.checks["traffic_probe"] is True and report.passed
+    assert probe.calls == [("10.0.0.7", 8080)] * 2
+    assert "blocked" in report.notes["traffic_probe"]
+
+
+def test_traffic_probe_fails_when_the_peer_still_connects(probed_api):
+    apply_quarantine(probed_api, TARGET, dry_run=False)
+    probe = FakeProbe(True)
+    report = verify_quarantine(probed_api, TARGET, probe)
+    assert report.checks["traffic_probe"] is False and not report.passed
+    assert len(probe.calls) == quarantine.PROBE_ATTEMPTS
+
+
+def test_a_probe_that_cannot_run_is_reported_not_passed(probed_api):
+    apply_quarantine(probed_api, TARGET, dry_run=False)
+    report = verify_quarantine(probed_api, TARGET, FakeProbe(None))
+    assert report.checks["traffic_probe"] is None
+    assert report.notes["traffic_probe"] == "the probe could not run"
+
+
+def test_release_needs_the_peer_to_connect_again(probed_api):
+    assert verify_release(probed_api, TARGET, FakeProbe(True)).checks["traffic_probe"] is True
+    assert verify_release(probed_api, TARGET, FakeProbe(False)).checks["traffic_probe"] is False
 
 
 def _event(mode, **extra):

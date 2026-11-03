@@ -1,6 +1,7 @@
 # Two identities with no overlap:
 #   cloudshield-investigator: read-only, cluster-wide metadata for enrichment.
 #   cloudshield-responder:    may patch pod labels in protected namespaces, nothing else.
+#   cloudshield-prober:       may exec into the one probe pod, to test traffic after a quarantine.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -67,4 +68,38 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: cloudshield-responder
+    namespace: cloudshield
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudshield-prober
+  namespace: cloudshield
+---
+# The verifier's traffic probe runs curl in the probe pod (infra/kind/probe.yaml). resourceNames
+# limits exec to that one pod: the prober cannot run commands in any workload, including the
+# quarantined one.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloudshield-prober
+  namespace: shop
+rules:
+  - apiGroups: [""]
+    resources: [pods/exec]
+    resourceNames: [probe]
+    verbs: [get, create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cloudshield-prober
+  namespace: shop
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cloudshield-prober
+subjects:
+  - kind: ServiceAccount
+    name: cloudshield-prober
     namespace: cloudshield

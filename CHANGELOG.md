@@ -8,6 +8,8 @@ All notable changes to CloudShield. The format follows [Keep a Changelog](https:
 - CI job `kind lab, scenario S1 end to end`: a three-node kind cluster with Calico runs `scripts/lab_e2e.py`. CloudShield quarantines a live pod as its responder service account, a probe pod confirms with real traffic that the pod is cut off and that rollback restores it, and five RBAC checks are refused by the API server. Run it locally with `make lab-e2e`.
 - The kind lab runs Falco (modern eBPF) and Falcosidekick. CI executes a download-and-run inside a live pod; Falco's own alert reaches CloudShield through the token-authenticated webhook and drives the whole scenario, with no fixture.
 - Kyverno v1.19.2 runs in the kind lab with the quarantine guard in Enforce mode. CI checks that the API server rejects an allow-policy that forgets the quarantine exclusion and admits the same policy with it.
+- Dependency review on every pull request (fails on a high or critical vulnerability or a GPL/AGPL license), and Dependabot weekly updates for Python packages, GitHub Actions and the Docker base image.
+- The verifier tests real traffic. With a traffic probe configured, a quarantine passes only when a peer the policies normally allow can no longer connect, and a rollback only when it can connect again. The probe runs as a new `cloudshield-prober` identity that may exec into the probe pod and nothing else. The check is renamed from `egress_probe` to `traffic_probe`.
 
 ### Fixed
 - CloudShield's Falco rules are ordered specific-first: Falco fires only the first matching rule, so the catch-all rule was hiding the critical `curl | sh` rule. Rule outputs now include the pod UID and container ID.

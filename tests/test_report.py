@@ -51,7 +51,7 @@ def test_demo_report_covers_every_stage():
         assert heading in report, heading
     assert "review: accepted by `analyst:bob`" in report
     assert "**Approved** by `analyst:bob`" in report and "(this version)" in report
-    assert "`egress_probe`: skipped" in report
+    assert "`traffic_probe`: skipped" in report
     assert "chain intact" in report
     assert "sha256:" in report and "`falco 14:02:40Z`" in report
 
