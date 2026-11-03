@@ -9,6 +9,7 @@ from common.models import ResponseProposal, Target
 from responder.quarantine import (
     ExecutionResult,
     PodApi,
+    TrafficProbe,
     VerificationReport,
     apply_quarantine,
     preview_quarantine,
@@ -39,7 +40,7 @@ class Executor(Protocol):
 
 
 Action = Callable[..., ExecutionResult]
-Verifier = Callable[[PodApi, Target], VerificationReport]
+Verifier = Callable[[PodApi, Target, TrafficProbe | None], VerificationReport]
 
 _ACTIONS: dict[str, tuple[Action, Verifier]] = {
     "k8s.pod.quarantine_label": (apply_quarantine, verify_quarantine),
@@ -48,9 +49,12 @@ _ACTIONS: dict[str, tuple[Action, Verifier]] = {
 
 
 class KubernetesExecutor:
-    def __init__(self, api: PodApi, identity: str = "cloudshield-responder") -> None:
+    def __init__(
+        self, api: PodApi, identity: str = "cloudshield-responder", probe: TrafficProbe | None = None
+    ) -> None:
         self.api = api
         self.identity = identity
+        self.probe = probe  # optional: verify with real traffic, not only policy state
 
     def _action(self, action_type: str) -> tuple[Action, Verifier]:
         if action_type not in _ACTIONS:
@@ -84,4 +88,4 @@ class KubernetesExecutor:
 
     def verify(self, proposal: ResponseProposal) -> VerificationReport:
         _, verifier = self._action(proposal.action_type)
-        return verifier(self.api, proposal.target)
+        return verifier(self.api, proposal.target, self.probe)

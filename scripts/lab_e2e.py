@@ -45,7 +45,7 @@ from demo import Transcript, to_svg  # noqa: E402
 from enrichment.context import PodContext, resolve_pod_context  # noqa: E402
 from ingestion.auth import SourceCredential  # noqa: E402
 from responder.executor import KubernetesExecutor  # noqa: E402
-from responder.quarantine import KubernetesPodApi  # noqa: E402
+from responder.quarantine import ExecTrafficProbe, KubernetesPodApi  # noqa: E402
 
 FIXTURE = ROOT / "detections" / "fixtures" / "s1_suspicious_process" / "falco_alert.json"
 LEAKY = (
@@ -80,6 +80,23 @@ def reachable(ip: str, *, expect: bool = True) -> bool:
             return ok
         time.sleep(2)
     return False
+
+
+def may_exec(account: str, pod: str) -> bool:
+    """Would the API server let this service account exec into this pod? (SubjectAccessReview)"""
+    review = client.AuthorizationV1Api().create_subject_access_review(
+        {
+            "apiVersion": "authorization.k8s.io/v1",
+            "kind": "SubjectAccessReview",
+            "spec": {
+                "user": f"system:serviceaccount:cloudshield:{account}",
+                "resourceAttributes": {
+                    "namespace": NS, "verb": "create", "resource": "pods", "subresource": "exec", "name": pod,
+                },
+            },
+        }
+    )  # fmt: skip
+    return bool(review.status.allowed)
 
 
 def forbidden(call: Callable[[], Any]) -> bool:
@@ -176,9 +193,10 @@ def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
     out, failures = Transcript(), []
     config.load_kube_config()
     admin = client.CoreV1Api()
-    investigator, responder = (
+    investigator, responder, prober = (
         as_service_account("cloudshield-investigator"),
         as_service_account("cloudshield-responder"),
+        as_service_account("cloudshield-prober"),
     )
 
     def row(num: str, verb: str, what: str, result: str = "", ok: bool | None = None) -> None:
@@ -207,7 +225,9 @@ def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
             }
         ),
     )
-    executor = KubernetesExecutor(KubernetesPodApi(responder), identity="cloudshield-responder")
+    # CloudShield's own verifier tests traffic from the probe pod, as the exec-only prober identity.
+    probe = ExecTrafficProbe(NS, PROBE, api_client=prober)
+    executor = KubernetesExecutor(KubernetesPodApi(responder), identity="cloudshield-responder", probe=probe)
     api = TestClient(create_app(settings, pod_resolver=resolve, executor=executor))
     alice, bob = {"authorization": "Bearer alice-lab"}, {"authorization": "Bearer bob-lab"}
 
@@ -305,11 +325,12 @@ def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
         "investigator cannot patch pods": forbidden(
             lambda: inv.patch_namespaced_pod(target.metadata.name, NS, patch, dry_run="All")),
         "investigator cannot read secrets": forbidden(lambda: inv.list_namespaced_secret(NS)),
+        "prober cannot exec into the target": not may_exec("cloudshield-prober", target.metadata.name),
     }  # fmt: skip
     row("11", "rbac", "least privilege, checked against the API server",
         f"{sum(checks.values())}/{len(checks)} refused", all(checks.values()))  # fmt: skip
     for name, refused in checks.items():
-        note(f"{name:<34} {'403' if refused else 'ALLOWED'}")
+        note(f"{name:<34} {'denied' if refused else 'ALLOWED'}")
 
     if admission:
         leaky, guarded = admission_check(client.NetworkingV1Api())
