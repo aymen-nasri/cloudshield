@@ -88,7 +88,7 @@ def test_t01_happy_path_is_verified_and_audited(env):
     reloaded = env.service.get(record.proposal.proposal_id)
     assert reloaded.state is S.VERIFIED
     assert reloaded.execution.checks["no_allow_policy_selects_pod"] is True
-    assert reloaded.execution.checks["egress_probe"] is None
+    assert reloaded.execution.checks["traffic_probe"] is None
     assert [a.approver for a in reloaded.approvals] == [BOB.id]
 
     actions = [r.action for r in env.stores.audit.records(env.case_id)]
@@ -242,5 +242,9 @@ def test_rollback_restores_normal_policies(env):
 
     assert done.state is S.VERIFIED
     assert QUARANTINE_LABEL not in env.pods.labels
-    assert done.execution.checks == {"label_removed": True, "allow_policies_apply_again": True}
+    assert done.execution.checks == {
+        "label_removed": True,
+        "allow_policies_apply_again": True,
+        "traffic_probe": None,  # no probe configured
+    }
     assert len(env.service.list_for_case(env.case_id)) == 2
