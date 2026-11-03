@@ -48,7 +48,7 @@ with grounded AI investigations and response actions that cannot bypass policy o
 
 <p align="center"><img src="docs/demo.svg" alt="Terminal output of scripts/demo.py: two alerts become one case, a quarantine is proposed, two unsafe approvals are refused, the approved action runs once and is verified, and the audit chain is intact" width="820"/></p>
 
-**On a real cluster.** The [`kind lab` CI job](https://github.com/aymen-nasri/cloudshield/actions/workflows/ci.yml?query=branch%3Amain) builds a three-node kind cluster with Calico and runs [`scripts/lab_e2e.py`](scripts/lab_e2e.py) against it. CloudShield quarantines a live checkout pod as its responder service account. A probe pod then shows the pod is cut off while its sibling replica still answers, and that rollback restores traffic. Five least-privilege checks are refused by the API server. Locally: `make lab-up && make lab-e2e`.
+**On a real cluster.** The [`kind lab` CI job](https://github.com/aymen-nasri/cloudshield/actions/workflows/ci.yml?query=branch%3Amain) builds a three-node kind cluster with Calico and Falco, and runs [`scripts/lab_e2e.py`](scripts/lab_e2e.py) against it. A download-and-run (`wget … | sh`) is executed inside a live checkout pod. Falco detects it, Falcosidekick posts the alert to CloudShield's webhook, and CloudShield opens a critical case and quarantines the pod as its responder service account. A probe pod then shows the pod is cut off while its sibling replica still answers, and that rollback restores traffic. Five least-privilege checks are refused by the API server. Locally: `make lab-up && make lab-e2e`.
 
 <p align="center"><img src="docs/lab-run.svg" alt="Terminal output of scripts/lab_e2e.py on a kind cluster: a live checkout pod is quarantined by the responder identity, traffic to it is blocked while another replica stays reachable, rollback restores it, five RBAC overreach attempts are refused with 403, and the audit chain is intact" width="746"/></p>
 
@@ -66,7 +66,7 @@ What exists today, in one place. ✅ **built and tested** here · 🧩 **written
 | **Cases** | Correlation rules C-01 to C-04, timelines, entity graph, hash-chained audit log, PostgreSQL | — | OpenSearch search |
 | **AI investigation** | Cited, validated investigations; prompt-injection defenses; runbook retrieval; offline baseline model; evaluation harness | Bedrock client | A configured Bedrock Guardrail, vector search, a multi-step read-only agent |
 | **Response** | Policy gate, hash-bound expiring approvals, quarantine and rollback **on a live kind cluster with real traffic checks** | Step Functions + Lambda path for AWS | More actions: revoke IAM sessions, isolate an EC2 instance |
-| **Kubernetes** | Calico NetworkPolicies, least-privilege RBAC checked against a live API server, Kyverno policy tests | Helm chart, EKS | Kyverno admission and Falco running in the lab, Cilium/Hubble |
+| **Kubernetes** | Falco (modern eBPF) detecting a live attack in the lab, Calico NetworkPolicies, least-privilege RBAC checked against a live API server, Kyverno policy tests | Helm chart, EKS | Kyverno admission in the lab, Cilium/Hubble |
 | **AWS** | GuardDuty findings, Pod Identity and EC2 lookups (against simulated AWS) | OpenTofu lab: VPC, EKS, GuardDuty, S3 Object Lock, KMS, budgets, GitHub OIDC | Lab bring-up on a real account |
 | **Delivery** | Tests on PostgreSQL, ruff, mypy, Gitleaks, Trivy, SBOM, infrastructure validation, kind end-to-end job | Cosign signing and ECR push | Dependency review, branch protection, Argo CD |
 | **Analyst tools** | Incident console, post-incident report | — | Chat approvals (Slack/Teams) |
@@ -145,9 +145,9 @@ CloudShield does **not** reinvent detection, a SIEM, or AWS's own AI investigati
 |---|---|---|
 | **AWS** | GuardDuty findings, EKS Pod Identity and EC2 lookups, S3 evidence store, SQS consumer | 🧩 VPC, EKS, IAM, EventBridge, S3 Object Lock, budgets, GitHub OIDC, Step Functions + Lambda, Bedrock client · 📐 CloudTrail, Security Hub, Secrets Manager |
 | **Linux** | Wazuh alert ingestion, the host-compromise scenario | 🧩 hardening and Wazuh enrolment with Ansible |
-| **Kubernetes** | Workload metadata, NetworkPolicy quarantine traffic-tested on kind, least-privilege RBAC checked live, Kyverno policy tests | 🧩 Helm chart, EKS · 📐 Kyverno admission and Falco in the lab |
+| **Kubernetes** | Workload metadata, NetworkPolicy quarantine traffic-tested on kind, least-privilege RBAC checked live, Kyverno policy tests | 🧩 Helm chart, EKS · 📐 Kyverno admission in the lab |
 | **Networking** | Pod-to-pod policy and egress control with Calico | 🧩 VPC Flow Logs · 📐 Security Group isolation, Cilium/Hubble |
-| **Detection engineering** | Custom Falco rules, five replayable attack scenarios, MITRE ATT&CK tagging | 📐 live Falco detections in the lab |
+| **Detection engineering** | Custom Falco rules firing on a live attack in the kind lab, five replayable attack scenarios, MITRE ATT&CK tagging | — |
 | **Data engineering** | OCSF normalization, idempotent ingestion, PostgreSQL modeling and migrations | 🧩 dead-letter queue · 📐 OpenSearch |
 | **AI engineering** | Runbook retrieval, structured outputs, citation enforcement, prompt-injection defenses, evaluation harness | 🧩 Bedrock client · 📐 vector search, LangGraph, MCP |
 | **Software engineering** | FastAPI services, Pydantic contracts, state machines, hash-chained audit log, REST API and console | — |
@@ -328,7 +328,6 @@ Designed and scheduled, not built yet. Each one moves to ✅ in the [Build statu
 
 | Feature | What it adds | Milestone |
 |---|---|---|
-| **Falco in the kind lab** | A real `curl \| sh` in the pod is detected, sent through Falcosidekick and quarantined, with no fixture involved | M1 · next |
 | **Kyverno admission in the kind lab** | The cluster itself rejects an allow-policy that forgets the quarantine exclusion | M1 · next |
 | **Egress probe in the verifier** | CloudShield checks that the quarantined pod's traffic is blocked, instead of only checking policy state | M4 · next |
 | **Signed images on GitHub's registry** | Cosign keyless signatures on every image, verifiable without an AWS account | M1 · next |
