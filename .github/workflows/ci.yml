@@ -123,7 +123,7 @@ jobs:
       WEBHOOK_PORT: "8099"
     steps:
       - uses: actions/checkout@v4
-      - uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
         with:
           install_only: true
       - name: Create the lab cluster (Calico, because kindnet does not enforce NetworkPolicy)
