@@ -143,16 +143,18 @@ jobs:
           kubectl apply -f infra/kind/probe.yaml
           kubectl -n shop rollout status deploy/checkout --timeout=180s
           kubectl -n shop wait --for=condition=Ready pod/probe --timeout=120s
-      - name: Install Kyverno and enforce the quarantine guard
+      - name: Install Kyverno and enforce the quarantine guard and image verification
         run: |
           kubectl create -f "https://github.com/kyverno/kyverno/releases/download/${KYVERNO_VERSION}/install.yaml"
           kubectl -n kyverno rollout status deploy/kyverno-admission-controller --timeout=300s
           # The deployment can report ready a few seconds before its webhook accepts connections.
           for attempt in 1 2 3 4 5 6; do
-            kubectl apply -f infra/policies/kyverno/require-quarantine-exclusion.yaml && break
+            kubectl apply -f infra/policies/kyverno/require-quarantine-exclusion.yaml \
+              -f infra/policies/kyverno/verify-cloudshield-images.yaml && break
             sleep 10
           done
-          kubectl wait --for=condition=Ready clusterpolicy/require-quarantine-exclusion --timeout=120s
+          kubectl wait --for=condition=Ready clusterpolicy/require-quarantine-exclusion \
+            clusterpolicy/verify-cloudshield-images --timeout=120s
       - name: Install Falco (modern eBPF) with Falcosidekick posting to CloudShield on the runner
         run: |
           # The kind network's gateway is the runner itself, where scripts/lab_e2e.py serves the API.
