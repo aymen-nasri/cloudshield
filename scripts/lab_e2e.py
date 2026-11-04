@@ -213,6 +213,15 @@ def admit_image(core: Any, image: str) -> tuple[bool, str]:
     return True, ""
 
 
+def rejection_reason(body: str) -> str:
+    """Kyverno's own words, from the API server's error body."""
+    try:
+        message = str(json.loads(body).get("message", body))
+    except ValueError:
+        message = body
+    return " ".join(message.split())[-170:]
+
+
 def image_checks(core: Any) -> list[tuple[str, str, bool, str]]:
     """Signed by this repo's workflow: admitted. Unsigned, or signed by someone else: rejected.
 
@@ -399,8 +408,8 @@ def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
             want = "admitted" if image == SIGNED_IMAGE else "rejected"
             row("13" if image == SIGNED_IMAGE else "", "image", label, want if ok else f"NOT {want}", ok)
             note(image)
-            if not ok or image == OTHER_SIGNER_IMAGE:
-                note(f"kyverno: {' '.join(reason.split())[:150]}")
+            if reason:
+                note(f"kyverno: {rejection_reason(reason)}")
 
     audit = api.get("/v1/audit", params={"case_id": case["case_id"]}).json()
     intact = audit["chain_intact"]
