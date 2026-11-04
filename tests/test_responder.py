@@ -2,15 +2,19 @@
 
 import copy
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
 from common.models import ResponseProposal, Target
+from core.app import Settings, build_traffic_probe
 from policy.approvals import proposal_hash
 from responder import quarantine
+from responder.executor import KubernetesExecutor
 from responder.lambda_handlers import ApprovalMismatch, handler
 from responder.quarantine import (
     QUARANTINE_LABEL,
+    ExecTrafficProbe,
     apply_quarantine,
     remove_quarantine,
     verify_quarantine,
@@ -112,8 +116,11 @@ def test_rollback_removes_the_label():
 class FakeProbe:
     """Answers in turn from a script of results; None means the probe could not run."""
 
-    def __init__(self, *answers):
-        self.answers, self.calls = list(answers), []
+    def __init__(self, *answers, covered=True):
+        self.answers, self.calls, self.covered = list(answers), [], covered
+
+    def covers(self, namespace, labels):
+        return self.covered
 
     def can_connect(self, ip, port):
         self.calls.append((ip, port))
@@ -132,7 +139,7 @@ def probed_api(monkeypatch):
 def test_traffic_probe_passes_once_the_peer_is_blocked(probed_api):
     apply_quarantine(probed_api, TARGET, dry_run=False)
     probe = FakeProbe(True, False)  # the CNI needs a moment, then the connection fails
-    report = verify_quarantine(probed_api, TARGET, probe)
+    report = verify_quarantine(probed_api, TARGET, probe, peer_connected_before=True)
     assert report.checks["traffic_probe"] is True and report.passed
     assert probe.calls == [("10.0.0.7", 8080)] * 2
     assert "blocked" in report.notes["traffic_probe"]
@@ -141,14 +148,14 @@ def test_traffic_probe_passes_once_the_peer_is_blocked(probed_api):
 def test_traffic_probe_fails_when_the_peer_still_connects(probed_api):
     apply_quarantine(probed_api, TARGET, dry_run=False)
     probe = FakeProbe(True)
-    report = verify_quarantine(probed_api, TARGET, probe)
+    report = verify_quarantine(probed_api, TARGET, probe, peer_connected_before=True)
     assert report.checks["traffic_probe"] is False and not report.passed
     assert len(probe.calls) == quarantine.PROBE_ATTEMPTS
 
 
 def test_a_probe_that_cannot_run_is_reported_not_passed(probed_api):
     apply_quarantine(probed_api, TARGET, dry_run=False)
-    report = verify_quarantine(probed_api, TARGET, FakeProbe(None))
+    report = verify_quarantine(probed_api, TARGET, FakeProbe(None), peer_connected_before=True)
     assert report.checks["traffic_probe"] is None
     assert report.notes["traffic_probe"] == "the probe could not run"
 
@@ -156,6 +163,94 @@ def test_a_probe_that_cannot_run_is_reported_not_passed(probed_api):
 def test_release_needs_the_peer_to_connect_again(probed_api):
     assert verify_release(probed_api, TARGET, FakeProbe(True)).checks["traffic_probe"] is True
     assert verify_release(probed_api, TARGET, FakeProbe(False)).checks["traffic_probe"] is False
+
+
+@pytest.mark.parametrize("before", [False, None])
+def test_a_block_proves_nothing_if_the_peer_could_not_connect_before(probed_api, before):
+    apply_quarantine(probed_api, TARGET, dry_run=False)
+    probe = FakeProbe(False)
+    report = verify_quarantine(probed_api, TARGET, probe, peer_connected_before=before)
+    assert report.checks["traffic_probe"] is None
+    assert "prove nothing" in report.notes["traffic_probe"]
+    assert probe.calls == []
+
+
+def test_pods_outside_the_probes_reach_are_skipped_in_both_directions(probed_api):
+    outside = FakeProbe(False, covered=False)
+    assert quarantine.peer_can_connect(probed_api, TARGET, outside) is None
+    released = verify_release(probed_api, TARGET, outside)
+    assert released.checks["traffic_probe"] is None and released.passed  # not a failed rollback
+    apply_quarantine(probed_api, TARGET, dry_run=False)
+    report = verify_quarantine(probed_api, TARGET, outside, peer_connected_before=True)
+    assert report.checks["traffic_probe"] is None
+    assert outside.calls == []
+
+
+def _proposal():
+    return ResponseProposal(
+        proposal_id="prp_1", case_id="case_1", action_type="k8s.pod.quarantine_label", target=TARGET,
+        environment="lab", rationale="x", requested_by="ai", created_at=datetime(2026, 10, 28, tzinfo=UTC),
+        dry_run_passed=True,
+    )  # fmt: skip
+
+
+def test_executor_passes_only_when_the_peer_was_connected_before_and_blocked_after(probed_api):
+    executor = KubernetesExecutor(probed_api, probe=FakeProbe(True, False))
+    executor.execute(_proposal())
+    assert executor.verify(_proposal()).checks["traffic_probe"] is True
+
+
+def test_executor_does_not_report_a_false_pass_for_a_peer_that_never_connected(probed_api):
+    executor = KubernetesExecutor(probed_api, probe=FakeProbe(False))
+    executor.execute(_proposal())
+    assert executor.verify(_proposal()).checks["traffic_probe"] is None
+
+
+def test_probe_scope_needs_the_namespace_and_every_selector_label():
+    probe = ExecTrafficProbe.__new__(ExecTrafficProbe)
+    probe.namespace, probe.target_selector = "shop", {"app": "checkout"}
+    assert probe.covers("shop", {"app": "checkout", "x": "y"})
+    assert not probe.covers("shop", {"app": "cart"})
+    assert not probe.covers("other", {"app": "checkout"})
+    probe.target_selector = {}
+    assert not probe.covers("shop", {"app": "checkout"})  # an empty selector must not mean "everything"
+
+
+def test_probe_is_off_by_default():
+    assert build_traffic_probe(Settings()) is None
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"probe_pod": "shop/probe"},
+        {"probe_pod": "shop/probe", "probe_token_file": Path("t")},
+        {"probe_pod": "probe", "probe_token_file": Path("t"), "probe_target_selector": "app=checkout"},
+        {"probe_pod": "shop/probe", "probe_token_file": Path("t"), "probe_target_selector": "app"},
+    ],
+    ids=["pod-only", "no-selector", "pod-without-namespace", "selector-without-value"],
+)
+def test_half_a_probe_configuration_fails_at_startup(fields):
+    with pytest.raises(ValueError, match="CLOUDSHIELD_PROBE"):
+        build_traffic_probe(Settings(**fields))
+
+
+def test_probe_settings_reach_the_probe(monkeypatch):
+    seen = {}
+
+    def fake(namespace, pod, *, token_file, target_selector):
+        seen.update(namespace=namespace, pod=pod, token_file=token_file, selector=target_selector)
+        return "probe"
+
+    monkeypatch.setattr(ExecTrafficProbe, "from_token_file", fake)
+    settings = Settings(
+        probe_pod="shop/probe", probe_token_file=Path("t"), probe_target_selector="app=checkout, tier=web"
+    )
+    assert build_traffic_probe(settings) == "probe"
+    assert seen == {
+        "namespace": "shop", "pod": "probe", "token_file": Path("t"),
+        "selector": {"app": "checkout", "tier": "web"},
+    }  # fmt: skip
 
 
 def _event(mode, **extra):

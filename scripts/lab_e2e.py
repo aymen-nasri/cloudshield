@@ -21,6 +21,7 @@ import logging
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -39,13 +40,13 @@ from fastapi.testclient import TestClient  # noqa: E402
 from kubernetes import client, config  # noqa: E402
 from kubernetes.client.exceptions import ApiException  # noqa: E402
 
-from core.app import Settings, create_app  # noqa: E402
+from core.app import Settings, build_traffic_probe, create_app  # noqa: E402
 from core.auth import AnalystDirectory, Principal  # noqa: E402
 from demo import Transcript, to_svg  # noqa: E402
 from enrichment.context import PodContext, resolve_pod_context  # noqa: E402
 from ingestion.auth import SourceCredential  # noqa: E402
 from responder.executor import KubernetesExecutor  # noqa: E402
-from responder.quarantine import ExecTrafficProbe, KubernetesPodApi  # noqa: E402
+from responder.quarantine import KubernetesPodApi  # noqa: E402
 
 FIXTURE = ROOT / "detections" / "fixtures" / "s1_suspicious_process" / "falco_alert.json"
 LEAKY = (
@@ -58,9 +59,13 @@ def kubectl(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["kubectl", *args], capture_output=True, text=True, check=check)  # noqa: S603, S607
 
 
+def service_account_token(name: str) -> str:
+    return kubectl("-n", "cloudshield", "create", "token", name, "--duration=1h").stdout.strip()
+
+
 def as_service_account(name: str) -> client.ApiClient:
     """An API client that authenticates as cloudshield/<name>, not as the cluster admin."""
-    token = kubectl("-n", "cloudshield", "create", "token", name, "--duration=1h").stdout.strip()
+    token = service_account_token(name)
     cfg = client.Configuration()
     config.load_kube_config(client_configuration=cfg)
     cfg.cert_file = cfg.key_file = None  # drop the admin client certificate
@@ -193,10 +198,9 @@ def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
     out, failures = Transcript(), []
     config.load_kube_config()
     admin = client.CoreV1Api()
-    investigator, responder, prober = (
+    investigator, responder = (
         as_service_account("cloudshield-investigator"),
         as_service_account("cloudshield-responder"),
-        as_service_account("cloudshield-prober"),
     )
 
     def row(num: str, verb: str, what: str, result: str = "", ok: bool | None = None) -> None:
@@ -225,8 +229,13 @@ def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
             }
         ),
     )
-    # CloudShield's own verifier tests traffic from the probe pod, as the exec-only prober identity.
-    probe = ExecTrafficProbe(NS, PROBE, api_client=prober)
+    # CloudShield's own verifier tests traffic from the probe pod, as the exec-only prober identity,
+    # configured through the same settings a deployment uses (a token mounted in a file).
+    token_file = Path(tempfile.mkdtemp()) / "prober-token"
+    token_file.write_text(service_account_token("cloudshield-prober"), encoding="utf-8")
+    settings.probe_pod, settings.probe_token_file = f"{NS}/{PROBE}", token_file
+    settings.probe_target_selector = "app=checkout"
+    probe = build_traffic_probe(settings)
     executor = KubernetesExecutor(KubernetesPodApi(responder), identity="cloudshield-responder", probe=probe)
     api = TestClient(create_app(settings, pod_resolver=resolve, executor=executor))
     alice, bob = {"authorization": "Bearer alice-lab"}, {"authorization": "Bearer bob-lab"}
@@ -295,6 +304,10 @@ def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
     marks = {True: "ok", False: "FAILED", None: "skipped"}
     for name, passed in x["execution"]["checks"].items():
         note(f"{name:<30} {marks[passed]}")
+    probed = x["execution"]["checks"].get("traffic_probe") is True
+    row(
+        "", "verify", "CloudShield's own probe saw the pod blocked", "yes" if probed else "NOT PROVEN", probed
+    )
 
     cut = not reachable(target.status.pod_ip, expect=False)
     row("9", "traffic", "probe -> quarantined pod", "blocked" if cut else "STILL REACHABLE", cut)
@@ -309,7 +322,7 @@ def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
     decision = {"justification": "evidence collected", "proposal_hash": p["proposal_hash"]}
     p = api.post(f"/v1/proposals/{p['proposal_id']}/approve", json=decision, headers=bob).json()
     x = api.post(f"/v1/proposals/{p['proposal_id']}/execute", headers=bob).json()
-    released = x["state"] == "verified"
+    released = x["state"] == "verified" and x["execution"]["checks"].get("traffic_probe") is True
     row("10", "rollback", "remove the label (proposed, approved, verified)", x["state"], released)
     back = reachable(target.status.pod_ip)
     row("", "traffic", "probe -> released pod", "reachable" if back else "BLOCKED", back)
