@@ -7,6 +7,11 @@ All notable changes to CloudShield. The format follows [Keep a Changelog](https:
 ### Added
 - The traffic probe can be turned on through settings (`CLOUDSHIELD_PROBE_POD`, `CLOUDSHIELD_PROBE_TOKEN_FILE`, `CLOUDSHIELD_PROBE_TARGET_SELECTOR`). Half a configuration fails at startup. The kind lab uses these settings and fails if the probe was skipped.
 - The Kyverno image policy runs in the kind lab in Enforce mode. In the `cloudshield` namespace, the lab checks that the image signed by this repository's workflow is admitted, an unsigned image is rejected (`no signatures found`), and an image signed by someone else is rejected (`subject mismatch`).
+- CloudShield runs as a pod in the kind lab, installed by its Helm chart from this commit's image, and Falcosidekick posts to its Service. The pod runs as the read-only investigator and mounts separate tokens for the responder and the prober. The lab no longer runs the API on the CI machine.
+- On `main`, a new job deploys the image just signed with image verification enforced from the start, and checks that an unsigned image is refused for real.
+
+### Changed
+- With no AWS region, the IAM role and EC2 lookups are off rather than failing at startup. The Helm chart's default image is now the signed one on GHCR.
 
 ### Fixed
 - The image policy only checked images under CloudShield's own names, so an image under any other name went unchecked. It now matches every image in the `cloudshield` namespace.

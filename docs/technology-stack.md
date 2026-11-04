@@ -33,7 +33,7 @@ Status markers: ✅ built and tested · 🧩 written as code, not deployed · �
 |---|---|---|---|
 | **RHEL / Amazon Linux** | Realistic host administration and process-level scenarios | Wazuh agent or curated host log export | 🧩 |
 | **Kubernetes (EKS)** | Runs the protected apps and CloudShield's own services | Pod, namespace, service account, event and audit context | ✅ kind in CI · 🧩 EKS |
-| **Helm** | Repeatable cluster components | Versioned, per-environment releases | 🧩 |
+| **Helm** | Repeatable cluster components | Versioned, per-environment releases | ✅ deployed to kind in CI |
 | **Falco** | Near-real-time Linux and container runtime detection | Falcosidekick → token-authenticated webhook → adapter [[R6]](references.md#references) | ✅ live in the kind lab |
 | **Wazuh** | Host logs, security events, file integrity, endpoint visibility | Wazuh integrator → adapter [[R5]](references.md#references) | ✅ adapter · 🧩 agent |
 | **Kubernetes RBAC** | Bounded cluster access by role and namespace | Read-only investigator identity; separate responder identity | ✅ refusals checked on kind in CI |
