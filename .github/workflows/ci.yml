@@ -28,7 +28,7 @@ jobs:
       CLOUDSHIELD_REQUIRE_POSTGRES_TESTS: "1" # fail, don't skip, if the database is missing
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -103,7 +103,7 @@ jobs:
       - name: Kyverno policy tests (the quarantine guard catches a leaky allow-policy)
         run: kyverno test infra/policies/kyverno/tests
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Ansible syntax check
@@ -168,7 +168,7 @@ jobs:
             --set falcosidekick.config.webhook.customHeaders="Authorization:Bearer lab-falco-key" \
             --wait --timeout 8m
           kubectl -n falco get pods -o wide
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
