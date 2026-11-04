@@ -2,7 +2,11 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.3.0] - 2026-11-04
+
+Scenario S1 now runs for real: on every pull request, a live attack in a kind cluster is detected by
+Falco and carried through to a verified quarantine and rollback. Images are published and signed.
+It has not yet run on EKS, a real AWS account or Bedrock.
 
 ### Added
 - CI job `kind lab, scenario S1 end to end`: a three-node kind cluster with Calico runs `scripts/lab_e2e.py`. CloudShield quarantines a live pod as its responder service account, a probe pod confirms with real traffic that the pod is cut off and that rollback restores it, and five RBAC checks are refused by the API server. Run it locally with `make lab-e2e`.
@@ -12,8 +16,14 @@ All notable changes to CloudShield. The format follows [Keep a Changelog](https:
 - The verifier tests real traffic. With a traffic probe configured, a quarantine passes only when a peer the policies normally allow can no longer connect, and a rollback only when it can connect again. The probe runs as a new `cloudshield-prober` identity that may exec into the probe pod and nothing else. The check is renamed from `egress_probe` to `traffic_probe`.
 - Every push to `main` publishes the image to `ghcr.io/aymen-nasri/cloudshield`, signs it keylessly with Cosign, attaches the CycloneDX SBOM as a signed attestation, and verifies both against the workflow's identity. No AWS account needed.
 
+### Changed
+- The Kyverno quarantine guard moved from Audit to Enforce. The image signature policy also covers GHCR, and stays in Audit.
+- GitHub Actions updated to their Node 24 versions, including checkout v7, setup-python v7, upload-artifact v7 and gitleaks-action v3.
+- The README is now a short front page with one build status table, with deep dives in `docs/` and a guide in each main folder.
+
 ### Fixed
 - CloudShield's Falco rules are ordered specific-first: Falco fires only the first matching rule, so the catch-all rule was hiding the critical `curl | sh` rule. Rule outputs now include the pod UID and container ID.
+- The kind lab retries applying the Kyverno policy until its webhook answers, and raises the runner's inotify limits so that Falco starts on every node.
 
 ## [0.2.0] - 2026-10-29
 
@@ -60,5 +70,6 @@ code and in CI. It has not yet run on a real cluster or AWS account (see the REA
   Trivy image scan and SBOM, and infrastructure validation (tofu validate, helm lint, kubeconform,
   kyverno test, Ansible syntax check).
 
+[0.3.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.3.0
 [0.2.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.2.0
 [0.1.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.1.0
