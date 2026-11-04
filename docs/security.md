@@ -69,7 +69,7 @@ flowchart LR
     GHA["GitHub Actions"] -. "OIDC: short-lived credentials" .-> STS["AWS STS"]
 ```
 
-> **What runs today.** ✅ On every pull request: tests with a PostgreSQL service, ruff, mypy, Gitleaks, infrastructure validation, the Docker build, the Trivy scan, an SBOM, dependency review, and scenario S1 on a three-node kind cluster with Falco, Kyverno admission and real traffic checks. Dependabot opens weekly update pull requests for Python packages, GitHub Actions and the base image. ✅ On every push to `main`, the image is pushed to GHCR, signed keylessly with Cosign, given a signed SBOM attestation, and both are verified against the workflow's identity. 🧩 The ECR push is written but skips until an AWS role is configured. 📐 Branch protection, the Argo CD deploy, Kyverno image verification and smoke tests are designed.
+> **What runs today.** ✅ On every pull request: tests with a PostgreSQL service, ruff, mypy, Gitleaks, infrastructure validation, the Docker build, the Trivy scan, an SBOM, dependency review, and scenario S1 on a three-node kind cluster with Falco, Kyverno admission (network rules and image signatures) and real traffic checks. Dependabot opens weekly update pull requests for Python packages, GitHub Actions and the base image. ✅ On every push to `main`, the image is pushed to GHCR, signed keylessly with Cosign, given a signed SBOM attestation, and both are verified against the workflow's identity. 🧩 The ECR push is written but skips until an AWS role is configured. 📐 Branch protection, the Argo CD deploy and smoke tests are designed.
 
 ### DevOps tooling
 
@@ -91,7 +91,7 @@ flowchart LR
 | **Trivy** | Image and dependency vulnerabilities; selected misconfigurations | ✅ |
 | **Gitleaks** | Accidentally committed secrets and tokens | ✅ |
 | **Cosign / Sigstore** | Signs artifacts and verifies them before a release is trusted [[R15]](references.md#references) | ✅ GHCR image and SBOM attestation, verified in CI · 🧩 ECR path |
-| **Kyverno** | Audit-then-enforce admission rules, image signature verification [[R13]](references.md#references) | ✅ quarantine guard enforced on kind · 🧩 image verification |
+| **Kyverno** | Audit-then-enforce admission rules, image signature verification [[R13]](references.md#references) | ✅ quarantine guard and image verification enforced on kind |
 | **AWS Secrets Manager** | Keeps operational secrets out of images and repositories | 📐 |
 | **GitHub OIDC + AWS IAM** | Short-lived CI credentials instead of long-lived keys [[R16]](references.md#references) | 🧩 |
 | **Branch protection + approvals** | Controls who can deploy and who can change response code | 📐 |

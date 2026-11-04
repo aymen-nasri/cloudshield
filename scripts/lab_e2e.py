@@ -225,25 +225,26 @@ def rejection_reason(body: str) -> str:
 def image_checks(core: Any) -> list[tuple[str, str, bool, str]]:
     """Signed by this repo's workflow: admitted. Unsigned, or signed by someone else: rejected.
 
-    The admitted image is the control: it shows the rejections aren't just network failures. Retries
+    A rejection only counts with the expected reason, so a network failure can't pass as one. Retries
     briefly, because a just-applied policy takes a moment to reach the webhook, and Kyverno calls
     the registry and Sigstore over the network.
     """
     cases = [
-        ("this repo's signed image", SIGNED_IMAGE, True),
-        ("unsigned image", UNSIGNED_IMAGE, False),
-        ("signed, but by someone else", OTHER_SIGNER_IMAGE, False),
+        ("this repo's signed image", SIGNED_IMAGE, ""),
+        ("unsigned image", UNSIGNED_IMAGE, "no signatures found"),
+        ("signed, but by someone else", OTHER_SIGNER_IMAGE, "subject mismatch"),
     ]
     results = []
-    for label, image, want_admitted in cases:
-        admitted, reason = admit_image(core, image)
-        for _ in range(9):
-            if admitted is want_admitted and (admitted or POLICY in reason):
-                break
-            time.sleep(5)
+    for label, image, expected_reason in cases:
+        ok, reason = False, ""
+        for attempt in range(10):
+            if attempt:
+                time.sleep(5)
             admitted, reason = admit_image(core, image)
-        by_policy = admitted or POLICY in reason
-        results.append((label, image, admitted is want_admitted and by_policy, reason))
+            ok = admitted if not expected_reason else not admitted and expected_reason in reason
+            if ok:
+                break
+        results.append((label, image, ok, reason))
     return results
 
 
