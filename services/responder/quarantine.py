@@ -6,11 +6,13 @@ in force, while the pod keeps running for forensics. Rollback removes the label.
 
 Verification checks the policy state and, when a traffic probe is configured, real traffic: a
 peer that the policies normally allow must fail to connect to the quarantined pod, and must
-connect again after rollback.
+connect again after rollback. A block only counts if that peer could connect beforehand; otherwise
+the check is skipped, because a peer that was never allowed proves nothing by failing.
 """
 
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal, Protocol
 
 from common.models import Target
@@ -35,6 +37,10 @@ class PodApi(Protocol):
 
 class TrafficProbe(Protocol):
     """Opens a new TCP connection from a peer the policies normally allow (e.g. a cart pod)."""
+
+    def covers(self, namespace: str, labels: dict[str, str]) -> bool:
+        """Is this peer meant to be able to reach a pod like this one?"""
+        ...
 
     def can_connect(self, ip: str, port: int) -> bool | None:
         """True or False; None when the probe itself could not run."""
@@ -102,14 +108,41 @@ def _endpoint(pod: dict[str, Any]) -> tuple[str, int] | None:
     return None
 
 
+def _probe_skip_reason(probe: TrafficProbe | None, pod: dict[str, Any], namespace: str) -> str | None:
+    if probe is None:
+        return "no traffic probe configured; policy state verified instead"
+    if _endpoint(pod) is None:
+        return "the pod exposes no port to probe; policy state verified instead"
+    if not probe.covers(namespace, pod["metadata"].get("labels") or {}):
+        return "the probe's peer is not meant to reach this pod; policy state verified instead"
+    return None
+
+
+def peer_can_connect(api: PodApi, target: Target, probe: TrafficProbe | None) -> bool | None:
+    """One connection attempt before a quarantine; None when the probe doesn't apply to this pod."""
+    pod, problem = _check_target(api, target)
+    if probe is None or problem or pod is None or target.namespace is None:
+        return None
+    endpoint = _endpoint(pod)
+    if endpoint is None or _probe_skip_reason(probe, pod, target.namespace):
+        return None
+    return probe.can_connect(*endpoint)
+
+
 def _probe_traffic(
-    report: VerificationReport, probe: TrafficProbe | None, pod: dict[str, Any], *, expect_connect: bool
+    report: VerificationReport,
+    probe: TrafficProbe | None,
+    pod: dict[str, Any],
+    namespace: str,
+    *,
+    expect_connect: bool,
 ) -> None:
     """Record whether an allowed peer can connect, waiting briefly for the expected answer."""
+    skip = _probe_skip_reason(probe, pod, namespace)
     endpoint = _endpoint(pod)
-    if probe is None or endpoint is None:
+    if skip or probe is None or endpoint is None:
         report.checks["traffic_probe"] = None
-        report.notes["traffic_probe"] = "no traffic probe configured; policy state verified instead"
+        report.notes["traffic_probe"] = skip or "no traffic probe configured"
         return
     ip, port = endpoint
     connected: bool | None = None
@@ -127,7 +160,13 @@ def _probe_traffic(
     report.notes["traffic_probe"] = f"allowed peer -> {ip}:{port}: {'connected' if connected else 'blocked'}"
 
 
-def verify_quarantine(api: PodApi, target: Target, probe: TrafficProbe | None = None) -> VerificationReport:
+def verify_quarantine(
+    api: PodApi,
+    target: Target,
+    probe: TrafficProbe | None = None,
+    *,
+    peer_connected_before: bool | None = None,
+) -> VerificationReport:
     report = VerificationReport()
     pod, problem = _check_target(api, target)
     if problem or pod is None or target.namespace is None:
@@ -145,7 +184,13 @@ def verify_quarantine(api: PodApi, target: Target, probe: TrafficProbe | None = 
     if still_allowed:
         report.notes["no_allow_policy_selects_pod"] = f"still selected by {still_allowed}"
     report.checks["pod_preserved_for_forensics"] = (pod.get("status") or {}).get("phase") == "Running"
-    _probe_traffic(report, probe, pod, expect_connect=False)
+    if _probe_skip_reason(probe, pod, target.namespace) is None and peer_connected_before is not True:
+        report.checks["traffic_probe"] = None
+        report.notes["traffic_probe"] = (
+            "the peer could not connect before this action, so a block would prove nothing"
+        )
+        return report
+    _probe_traffic(report, probe, pod, target.namespace, expect_connect=False)
     return report
 
 
@@ -162,7 +207,7 @@ def verify_release(api: PodApi, target: Target, probe: TrafficProbe | None = Non
     selecting = allow_policies_selecting(api.list_network_policies(target.namespace), labels)
     report.checks["allow_policies_apply_again"] = bool(selecting)
     report.notes["allow_policies_apply_again"] = f"selected by {selecting}" if selecting else "none"
-    _probe_traffic(report, probe, pod, expect_connect=True)
+    _probe_traffic(report, probe, pod, target.namespace, expect_connect=True)
     return report
 
 
@@ -225,7 +270,8 @@ class ExecTrafficProbe:
     """TrafficProbe that runs curl in one dedicated probe pod through the Kubernetes exec API.
 
     It acts as the cloudshield-prober service account, whose only permission is exec into that one
-    pod (RBAC resourceNames), so it cannot run commands anywhere else.
+    pod (RBAC resourceNames), so it cannot run commands anywhere else. `target_selector` names the
+    pods the NetworkPolicies let this peer reach; any other pod is out of scope for the probe.
     """
 
     def __init__(
@@ -235,12 +281,38 @@ class ExecTrafficProbe:
         container: str = "curl",
         *,
         api_client: Any,
+        target_selector: dict[str, str],
         timeout: int = 3,
     ) -> None:
         from kubernetes import client
 
         self._core = client.CoreV1Api(api_client)
         self.namespace, self.pod, self.container, self.timeout = namespace, pod, container, timeout
+        self.target_selector = target_selector
+
+    @classmethod
+    def from_token_file(
+        cls, namespace: str, pod: str, *, token_file: Path, target_selector: dict[str, str]
+    ) -> "ExecTrafficProbe":
+        """Authenticate as the prober, whose token is mounted separately from this process's identity."""
+        from kubernetes import client, config
+
+        token = token_file.read_text(encoding="utf-8").strip()
+        if not token:
+            raise ValueError(f"traffic probe token file {token_file} is empty")
+        cfg = client.Configuration()
+        try:
+            config.load_incluster_config(client_configuration=cfg)
+        except config.ConfigException:
+            config.load_kube_config(client_configuration=cfg)
+        cfg.refresh_api_key_hook = None  # or the in-cluster loader swaps back to this pod's identity
+        cfg.cert_file = cfg.key_file = None  # or a kubeconfig's client certificate wins over the token
+        cfg.api_key = {"authorization": f"Bearer {token}"}
+        return cls(namespace, pod, api_client=client.ApiClient(cfg), target_selector=target_selector)
+
+    def covers(self, namespace: str, labels: dict[str, str]) -> bool:
+        wanted = self.target_selector.items()
+        return namespace == self.namespace and bool(wanted) and all(labels.get(k) == v for k, v in wanted)
 
     def can_connect(self, ip: str, port: int) -> bool | None:
         from kubernetes.client.exceptions import ApiException

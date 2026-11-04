@@ -12,6 +12,7 @@ from responder.quarantine import (
     TrafficProbe,
     VerificationReport,
     apply_quarantine,
+    peer_can_connect,
     preview_quarantine,
     remove_quarantine,
     verify_quarantine,
@@ -55,6 +56,9 @@ class KubernetesExecutor:
         self.api = api
         self.identity = identity
         self.probe = probe  # optional: verify with real traffic, not only policy state
+        # Whether the peer could connect just before each quarantine. Kept in this process only:
+        # after a restart the check is skipped, never passed.
+        self._peer_before: dict[str, bool | None] = {}
 
     def _action(self, action_type: str) -> tuple[Action, Verifier]:
         if action_type not in _ACTIONS:
@@ -84,8 +88,14 @@ class KubernetesExecutor:
 
     def execute(self, proposal: ResponseProposal) -> ExecutionResult:
         action, _ = self._action(proposal.action_type)
+        if proposal.action_type == "k8s.pod.quarantine_label":
+            before = peer_can_connect(self.api, proposal.target, self.probe)
+            self._peer_before[proposal.proposal_id] = before
         return action(self.api, proposal.target, dry_run=False)
 
     def verify(self, proposal: ResponseProposal) -> VerificationReport:
         _, verifier = self._action(proposal.action_type)
+        if proposal.action_type == "k8s.pod.quarantine_label":
+            before = self._peer_before.pop(proposal.proposal_id, None)
+            return verify_quarantine(self.api, proposal.target, self.probe, peer_connected_before=before)
         return verifier(self.api, proposal.target, self.probe)

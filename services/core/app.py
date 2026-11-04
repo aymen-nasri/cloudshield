@@ -34,6 +34,7 @@ from investigator.workflow import InvestigationService
 from policy.engine import load_policies
 from reporting.router import build_router as build_report_router
 from responder.executor import Executor, KubernetesExecutor
+from responder.quarantine import ExecTrafficProbe, TrafficProbe
 from response.records import InMemoryProposalStore, ProposalStore
 from response.router import build_router as build_response_router
 from response.service import ResponseService
@@ -61,6 +62,11 @@ class Settings:
     enrichment: str | None = None
     # "k8s" runs approved actions in-process with the responder identity (lab). Unset: none.
     executor: str | None = None
+    # Verify quarantines with real traffic. All three together or none: "namespace/pod" of the peer,
+    # the mounted cloudshield-prober token, and "key=value,..." labels of the pods it may reach.
+    probe_pod: str | None = None
+    probe_token_file: Path | None = None
+    probe_target_selector: str | None = None
     # Which policy environment this deployment is ("lab" or "prod"); the allowlist is per environment.
     environment: str = "lab"
     # "offline" = deterministic baseline (no LLM); "bedrock" = Amazon Bedrock. Unset: investigations off.
@@ -87,6 +93,7 @@ class Settings:
             # Lab only: lets scripts/replay_fixture.py submit recorded GuardDuty findings over HTTP.
             credentials["guardduty"] = SourceCredential(hmac_secret=secret)
         evidence_dir = os.getenv("CLOUDSHIELD_EVIDENCE_DIR")
+        probe_token_file = os.getenv("CLOUDSHIELD_PROBE_TOKEN_FILE")
         return cls(
             cluster=os.getenv("CLOUDSHIELD_CLUSTER"),
             account_id=os.getenv("CLOUDSHIELD_ACCOUNT_ID"),
@@ -95,6 +102,9 @@ class Settings:
             database_url=os.getenv("CLOUDSHIELD_DATABASE_URL"),
             enrichment=os.getenv("CLOUDSHIELD_ENRICHMENT"),
             executor=os.getenv("CLOUDSHIELD_EXECUTOR"),
+            probe_pod=os.getenv("CLOUDSHIELD_PROBE_POD"),
+            probe_token_file=Path(probe_token_file) if probe_token_file else None,
+            probe_target_selector=os.getenv("CLOUDSHIELD_PROBE_TARGET_SELECTOR"),
             environment=os.getenv("CLOUDSHIELD_ENVIRONMENT", "lab"),
             analysts=AnalystDirectory.from_json(os.getenv("CLOUDSHIELD_ANALYSTS")),
             investigator=os.getenv("CLOUDSHIELD_INVESTIGATOR"),
@@ -164,6 +174,27 @@ def build_model(settings: Settings) -> LanguageModel | None:
     return None
 
 
+def build_traffic_probe(settings: Settings) -> TrafficProbe | None:
+    """The verifier's traffic probe. Half a configuration fails at startup rather than skipping checks."""
+    pod_ref, token_file, selector_text = (
+        settings.probe_pod, settings.probe_token_file, settings.probe_target_selector,
+    )  # fmt: skip
+    if not (pod_ref or token_file or selector_text):
+        return None
+    if not (pod_ref and token_file and selector_text):
+        raise ValueError(
+            "the traffic probe needs CLOUDSHIELD_PROBE_POD, CLOUDSHIELD_PROBE_TOKEN_FILE "
+            "and CLOUDSHIELD_PROBE_TARGET_SELECTOR together"
+        )
+    namespace, _, pod = pod_ref.partition("/")
+    pairs = [part.partition("=") for part in selector_text.split(",")]
+    if not (namespace and pod) or not all(key and sep and value for key, sep, value in pairs):
+        raise ValueError("expected CLOUDSHIELD_PROBE_POD=namespace/pod and a selector of key=value,...")
+    selector = {key.strip(): value.strip() for key, _, value in pairs}
+
+    return ExecTrafficProbe.from_token_file(namespace, pod, token_file=token_file, target_selector=selector)
+
+
 def create_app(
     settings: Settings | None = None,
     *,
@@ -178,7 +209,7 @@ def create_app(
     if executor is None and settings.executor == "k8s":
         from responder.quarantine import KubernetesPodApi
 
-        executor = KubernetesExecutor(KubernetesPodApi())
+        executor = KubernetesExecutor(KubernetesPodApi(), probe=build_traffic_probe(settings))
     response = ResponseService(
         stores.proposals,
         stores.cases,
