@@ -6,6 +6,9 @@ COPY services ./services
 RUN pip install --no-cache-dir --prefix=/install ".[postgres,aws,k8s]"
 
 FROM python:3.12-slim
+LABEL org.opencontainers.image.source=https://github.com/aymen-nasri/cloudshield \
+      org.opencontainers.image.description="CloudShield core API" \
+      org.opencontainers.image.licenses=MIT
 RUN useradd --system --uid 10001 --no-create-home cloudshield
 COPY --from=build /install /usr/local
 COPY runbooks /opt/cloudshield/runbooks
