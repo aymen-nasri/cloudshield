@@ -6,8 +6,10 @@ All notable changes to CloudShield. The format follows [Keep a Changelog](https:
 
 ### Added
 - The traffic probe can be turned on through settings (`CLOUDSHIELD_PROBE_POD`, `CLOUDSHIELD_PROBE_TOKEN_FILE`, `CLOUDSHIELD_PROBE_TARGET_SELECTOR`). Half a configuration fails at startup. The kind lab uses these settings and fails if the probe was skipped.
+- The Kyverno image policy runs in the kind lab in Enforce mode. In the `cloudshield` namespace, the lab checks that the image signed by this repository's workflow is admitted, an unsigned image is rejected (`no signatures found`), and an image signed by someone else is rejected (`subject mismatch`).
 
 ### Fixed
+- The image policy only checked images under CloudShield's own names, so an image under any other name went unchecked. It now matches every image in the `cloudshield` namespace.
 - The traffic probe could report a false pass. Quarantining a pod its peer was never allowed to reach failed to connect and counted as blocked. A block now counts only if the peer could connect just before the quarantine, and pods outside the probe's configured reach are skipped in both directions.
 
 ## [0.3.0] - 2026-11-04
