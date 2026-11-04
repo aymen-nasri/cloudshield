@@ -10,6 +10,7 @@ All notable changes to CloudShield. The format follows [Keep a Changelog](https:
 - Kyverno v1.19.2 runs in the kind lab with the quarantine guard in Enforce mode. CI checks that the API server rejects an allow-policy that forgets the quarantine exclusion and admits the same policy with it.
 - Dependency review on every pull request (fails on a high or critical vulnerability or a GPL/AGPL license), and Dependabot weekly updates for Python packages, GitHub Actions and the Docker base image.
 - The verifier tests real traffic. With a traffic probe configured, a quarantine passes only when a peer the policies normally allow can no longer connect, and a rollback only when it can connect again. The probe runs as a new `cloudshield-prober` identity that may exec into the probe pod and nothing else. The check is renamed from `egress_probe` to `traffic_probe`.
+- Every push to `main` publishes the image to `ghcr.io/aymen-nasri/cloudshield`, signs it keylessly with Cosign, attaches the CycloneDX SBOM as a signed attestation, and verifies both against the workflow's identity. No AWS account needed.
 
 ### Fixed
 - CloudShield's Falco rules are ordered specific-first: Falco fires only the first matching rule, so the catch-all rule was hiding the critical `curl | sh` rule. Rule outputs now include the pod UID and container ID.

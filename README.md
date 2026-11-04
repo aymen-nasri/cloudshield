@@ -15,7 +15,7 @@ with grounded AI investigations and response actions that cannot bypass policy o
 ![Falco](https://img.shields.io/badge/Falco-runtime%20detection-00AEC7)
 ![OCSF](https://img.shields.io/badge/schema-OCSF-6E40C9)
 ![IaC](https://img.shields.io/badge/IaC-OpenTofu%20%C2%B7%20Helm%20%C2%B7%20Ansible-844FBA?logo=opentofu&logoColor=white)
-![DevSecOps](https://img.shields.io/badge/DevSecOps-Gitleaks%20%C2%B7%20Trivy%20%C2%B7%20Kyverno-2E7D32)
+![DevSecOps](https://img.shields.io/badge/DevSecOps-Gitleaks%20%C2%B7%20Trivy%20%C2%B7%20Cosign%20%C2%B7%20Kyverno-2E7D32)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 </div>
@@ -68,7 +68,7 @@ What exists today, in one place. ✅ **built and tested** here · 🧩 **written
 | **Response** | Policy gate, hash-bound expiring approvals, quarantine and rollback **on a live kind cluster**, verified by CloudShield's own traffic probe | Step Functions + Lambda path for AWS | More actions: revoke IAM sessions, isolate an EC2 instance |
 | **Kubernetes** | Falco (modern eBPF) detecting a live attack in the lab, Calico NetworkPolicies, least-privilege RBAC checked against a live API server, Kyverno admission rejecting a leaky allow-policy | Helm chart, EKS | Cilium/Hubble |
 | **AWS** | GuardDuty findings, Pod Identity and EC2 lookups (against simulated AWS) | OpenTofu lab: VPC, EKS, GuardDuty, S3 Object Lock, KMS, budgets, GitHub OIDC | Lab bring-up on a real account |
-| **Delivery** | Tests on PostgreSQL, ruff, mypy, Gitleaks, Trivy, SBOM, infrastructure validation, kind end-to-end job, dependency review, Dependabot | Cosign signing and ECR push | Branch protection, Argo CD |
+| **Delivery** | Tests on PostgreSQL, ruff, mypy, Gitleaks, Trivy, SBOM, infrastructure validation, kind end-to-end job, dependency review, Dependabot, images on GHCR signed with Cosign and carrying a signed SBOM | ECR push | Branch protection, Argo CD |
 | **Analyst tools** | Incident console, post-incident report | — | Chat approvals (Slack/Teams) |
 | **Operations** | Sensor coverage heartbeat | Dead-letter queue alarm | Prometheus metrics, Grafana, OpenTelemetry |
 
@@ -152,7 +152,7 @@ CloudShield does **not** reinvent detection, a SIEM, or AWS's own AI investigati
 | **AI engineering** | Runbook retrieval, structured outputs, citation enforcement, prompt-injection defenses, evaluation harness | 🧩 Bedrock client · 📐 vector search, LangGraph, MCP |
 | **Software engineering** | FastAPI services, Pydantic contracts, state machines, hash-chained audit log, REST API and console | — |
 | **DevOps** | GitHub Actions, Docker, a kind cluster built and tested in CI | 🧩 OpenTofu, Helm, Ansible · 📐 Argo CD, Prometheus/Grafana, OpenTelemetry |
-| **DevSecOps** | Gitleaks, Trivy, SBOM, dependency review, Dependabot, Kyverno admission, infrastructure validation | 🧩 Cosign signing, GitHub OIDC · 📐 branch protection |
+| **DevSecOps** | Gitleaks, Trivy, signed SBOM, keyless Cosign signing, dependency review, Dependabot, Kyverno admission, infrastructure validation | 🧩 GitHub OIDC to AWS · 📐 branch protection |
 
 > **How this goes beyond a typical SOC-automation lab:** a "Wazuh → SOAR → block IP" pipeline proves alert collection and automated containment. CloudShield goes further in three ways: **cross-layer resource context**, **investigation quality with provenance**, and **safety-aware, reversible, auditable response**.
 
@@ -328,7 +328,6 @@ Designed and scheduled, not built yet. Each one moves to ✅ in the [Build statu
 
 | Feature | What it adds | Milestone |
 |---|---|---|
-| **Signed images on GitHub's registry** | Cosign keyless signatures on every image, verifiable without an AWS account | M1 · next |
 | **Prometheus metrics and a Grafana dashboard** | Ingest lag, queue depth, approval latency, model cost | M2 |
 | **AWS lab bring-up** | GuardDuty → EventBridge → SQS → CloudShield on a real account, with budget alarms | M1 |
 | **Bedrock with a Guardrail** | The evaluation harness scored against a real model before it is trusted | M3 |
@@ -433,6 +432,14 @@ make demo-incident   # replays GuardDuty + Falco out of order; both land in one 
 make console-demo    # or: the console on demo data at http://127.0.0.1:8090/console
 curl localhost:8080/v1/cases
 docker compose restart core && curl localhost:8080/v1/cases   # the case survives a restart
+```
+
+**Verify the published image** (public, no login needed; requires [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/)):
+
+```bash
+cosign verify ghcr.io/aymen-nasri/cloudshield:main \
+  --certificate-identity https://github.com/aymen-nasri/cloudshield/.github/workflows/ci.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 **Local Kubernetes lab:**
