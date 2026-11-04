@@ -120,8 +120,7 @@ class Enricher:
 
 
 def kubernetes_pod_resolver(cluster: str, region: str | None = None) -> PodResolver:
-    """Resolver backed by the Kubernetes API (investigator RBAC) and read-only AWS calls."""
-    import boto3
+    """Resolver backed by the Kubernetes API (investigator RBAC) and, with a region, read-only AWS calls."""
     from kubernetes import client, config
 
     try:
@@ -129,8 +128,12 @@ def kubernetes_pod_resolver(cluster: str, region: str | None = None) -> PodResol
     except config.ConfigException:
         config.load_kube_config()
     core, apps = client.CoreV1Api(), client.AppsV1Api()
-    eks: Any = boto3.client("eks", region_name=region)
-    ec2: Any = boto3.client("ec2", region_name=region)
+    eks: Any = None
+    ec2: Any = None
+    if region:  # no region (the kind lab): the IAM role and EC2 instance stay unresolved
+        import boto3
+
+        eks, ec2 = boto3.client("eks", region_name=region), boto3.client("ec2", region_name=region)
 
     def resolve(namespace: str, pod: str) -> PodContext:
         return resolve_pod_context(

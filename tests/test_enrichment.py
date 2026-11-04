@@ -93,6 +93,19 @@ def test_lookups_are_cached_per_pod(falco):
     assert len(calls) == 2
 
 
+def test_without_aws_clients_the_aws_fields_stay_unresolved():
+    pod = NS(
+        metadata=NS(owner_references=None, uid="uid-1", labels={"app": "checkout"}),
+        spec=NS(service_account_name="checkout", node_name="node-1"),
+    )
+    core = NS(read_namespaced_pod=lambda name, namespace: pod)
+    ctx = resolve_pod_context(
+        core=core, apps=None, eks=None, ec2=None, cluster="kind", namespace="shop", pod_name="checkout-1"
+    )
+    assert (ctx.service_account, ctx.node) == ("checkout", "node-1")
+    assert ctx.iam_role_arn is None and ctx.instance_id is None
+
+
 def test_resolve_pod_context_follows_owners_and_aws_lookups():
     pod = NS(
         metadata=NS(uid=POD_UID, labels={"app": "checkout"},

@@ -34,7 +34,7 @@ from investigator.workflow import InvestigationService
 from policy.engine import load_policies
 from reporting.router import build_router as build_report_router
 from responder.executor import Executor, KubernetesExecutor
-from responder.quarantine import ExecTrafficProbe, TrafficProbe
+from responder.quarantine import ExecTrafficProbe, TrafficProbe, api_client_from_token_file
 from response.records import InMemoryProposalStore, ProposalStore
 from response.router import build_router as build_response_router
 from response.service import ResponseService
@@ -62,6 +62,8 @@ class Settings:
     enrichment: str | None = None
     # "k8s" runs approved actions in-process with the responder identity (lab). Unset: none.
     executor: str | None = None
+    # The cloudshield-responder token. Unset: the executor uses this process's own identity.
+    responder_token_file: Path | None = None
     # Verify quarantines with real traffic. All three together or none: "namespace/pod" of the peer,
     # the mounted cloudshield-prober token, and "key=value,..." labels of the pods it may reach.
     probe_pod: str | None = None
@@ -94,6 +96,7 @@ class Settings:
             credentials["guardduty"] = SourceCredential(hmac_secret=secret)
         evidence_dir = os.getenv("CLOUDSHIELD_EVIDENCE_DIR")
         probe_token_file = os.getenv("CLOUDSHIELD_PROBE_TOKEN_FILE")
+        responder_token_file = os.getenv("CLOUDSHIELD_RESPONDER_TOKEN_FILE")
         return cls(
             cluster=os.getenv("CLOUDSHIELD_CLUSTER"),
             account_id=os.getenv("CLOUDSHIELD_ACCOUNT_ID"),
@@ -102,6 +105,7 @@ class Settings:
             database_url=os.getenv("CLOUDSHIELD_DATABASE_URL"),
             enrichment=os.getenv("CLOUDSHIELD_ENRICHMENT"),
             executor=os.getenv("CLOUDSHIELD_EXECUTOR"),
+            responder_token_file=Path(responder_token_file) if responder_token_file else None,
             probe_pod=os.getenv("CLOUDSHIELD_PROBE_POD"),
             probe_token_file=Path(probe_token_file) if probe_token_file else None,
             probe_target_selector=os.getenv("CLOUDSHIELD_PROBE_TARGET_SELECTOR"),
@@ -209,7 +213,9 @@ def create_app(
     if executor is None and settings.executor == "k8s":
         from responder.quarantine import KubernetesPodApi
 
-        executor = KubernetesExecutor(KubernetesPodApi(), probe=build_traffic_probe(settings))
+        token_file = settings.responder_token_file
+        pods = KubernetesPodApi(api_client_from_token_file(token_file) if token_file else None)
+        executor = KubernetesExecutor(pods, probe=build_traffic_probe(settings))
     response = ResponseService(
         stores.proposals,
         stores.cases,

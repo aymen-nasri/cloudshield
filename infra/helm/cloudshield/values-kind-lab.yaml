@@ -1,0 +1,16 @@
+# Kind lab: the image built from this checkout, with the full response path switched on.
+# Used by infra/kind/deploy-cloudshield.sh.
+image:
+  repository: cloudshield/core
+  tag: lab
+  pullPolicy: Never
+
+cluster: kind-cloudshield-lab
+
+executor: k8s
+responderTokenSecret: cloudshield-responder-token
+
+trafficProbe:
+  pod: shop/probe
+  tokenSecret: cloudshield-prober-token
+  targetSelector: app=checkout
