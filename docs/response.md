@@ -121,7 +121,7 @@ spec:
 |---|---|
 | **Dry-run** | Server-side dry-run of the label patch, plus listing the services, callers and replicas that will be affected |
 | **Execute** | Patch the pod label using the action-specific RBAC identity and an idempotency key |
-| **Verify** | The label is present; the pod is matched by no allow-policy; a traffic probe confirms an allowed peer can no longer open a connection; the pod keeps running |
+| **Verify** | The label is present; the pod is matched by no allow-policy; a traffic probe confirms that a peer which could connect just before the quarantine no longer can (otherwise the check is skipped, because a block would prove nothing); the pod keeps running |
 | **Rollback** | Remove the label (a pre-approved compensating action) and re-verify connectivity: the same peer must connect again |
 
 > Behavior for connections that were already open depends on the CNI, so verification probes new connections and records the CNI in use.
