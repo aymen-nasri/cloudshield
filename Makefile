@@ -49,16 +49,19 @@ lab-up:
 	kubectl create -f https://github.com/kyverno/kyverno/releases/download/$(KYVERNO_VERSION)/install.yaml
 	kubectl -n kyverno rollout status deploy/kyverno-admission-controller --timeout=300s
 	for attempt in 1 2 3 4 5 6; do \
-		kubectl apply -f infra/policies/kyverno/require-quarantine-exclusion.yaml \
-			-f infra/policies/kyverno/verify-cloudshield-images.yaml && break; sleep 10; \
+		kubectl apply -f infra/policies/kyverno/require-quarantine-exclusion.yaml && break; sleep 10; \
 	done
+	bash infra/kind/deploy-cloudshield.sh
+	kubectl apply -f infra/policies/kyverno/verify-cloudshield-images.yaml
 	helm repo add falcosecurity https://falcosecurity.github.io/charts --force-update
 	helm upgrade --install falco falcosecurity/falco -n falco --create-namespace \
 		-f infra/helm/falco-values.yaml \
+		--set collectors.kubernetes.enabled=false \
+		--set falcosidekick.config.webhook.customHeaders='Authorization:Bearer lab-falco-key' \
 		--set-file 'customRules.cloudshield_rules\.yaml=detections/falco/cloudshield_rules.yaml'
 
 lab-e2e:
-	python scripts/lab_e2e.py --admission
+	python scripts/lab_e2e.py --alert falco --admission
 
 lab-down:
 	kind delete cluster --name $(CLUSTER)

@@ -17,4 +17,4 @@ python scripts/demo.py                       # no setup needed
 make lab-up && python scripts/lab_e2e.py     # needs Docker, kind, kubectl and Helm
 ```
 
-`lab_e2e.py` turns on the traffic probe through the same settings a deployment uses (`CLOUDSHIELD_PROBE_POD`, `CLOUDSHIELD_PROBE_TOKEN_FILE`, `CLOUDSHIELD_PROBE_TARGET_SELECTOR`), and fails if the probe was skipped instead of passing.
+`lab_e2e.py` drives CloudShield as it runs in the cluster, through a port-forward. The chart turns on the traffic probe (`CLOUDSHIELD_PROBE_POD`, `CLOUDSHIELD_PROBE_TOKEN_FILE`, `CLOUDSHIELD_PROBE_TARGET_SELECTOR`), and the script fails if the probe was skipped instead of passing.

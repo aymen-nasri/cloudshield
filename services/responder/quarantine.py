@@ -227,6 +227,24 @@ def preview_quarantine(api: PodApi, target: Target) -> dict[str, Any]:
     }
 
 
+def api_client_from_token_file(token_file: Path) -> Any:
+    """A Kubernetes client acting as the service account whose token is in this file."""
+    from kubernetes import client, config
+
+    token = token_file.read_text(encoding="utf-8").strip()
+    if not token:
+        raise ValueError(f"Kubernetes token file {token_file} is empty")
+    cfg = client.Configuration()
+    try:
+        config.load_incluster_config(client_configuration=cfg)
+    except config.ConfigException:
+        config.load_kube_config(client_configuration=cfg)
+    cfg.refresh_api_key_hook = None  # or the in-cluster loader swaps back to this pod's identity
+    cfg.cert_file = cfg.key_file = None  # or a kubeconfig's client certificate wins over the token
+    cfg.api_key = {"authorization": f"Bearer {token}"}
+    return client.ApiClient(cfg)
+
+
 class KubernetesPodApi:
     """PodApi backed by the official Kubernetes client (in-cluster config, responder service account)."""
 
@@ -295,20 +313,9 @@ class ExecTrafficProbe:
         cls, namespace: str, pod: str, *, token_file: Path, target_selector: dict[str, str]
     ) -> "ExecTrafficProbe":
         """Authenticate as the prober, whose token is mounted separately from this process's identity."""
-        from kubernetes import client, config
-
-        token = token_file.read_text(encoding="utf-8").strip()
-        if not token:
-            raise ValueError(f"traffic probe token file {token_file} is empty")
-        cfg = client.Configuration()
-        try:
-            config.load_incluster_config(client_configuration=cfg)
-        except config.ConfigException:
-            config.load_kube_config(client_configuration=cfg)
-        cfg.refresh_api_key_hook = None  # or the in-cluster loader swaps back to this pod's identity
-        cfg.cert_file = cfg.key_file = None  # or a kubeconfig's client certificate wins over the token
-        cfg.api_key = {"authorization": f"Bearer {token}"}
-        return cls(namespace, pod, api_client=client.ApiClient(cfg), target_selector=target_selector)
+        return cls(
+            namespace, pod, api_client=api_client_from_token_file(token_file), target_selector=target_selector
+        )
 
     def covers(self, namespace: str, labels: dict[str, str]) -> bool:
         wanted = self.target_selector.items()

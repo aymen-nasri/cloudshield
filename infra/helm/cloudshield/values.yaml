@@ -1,6 +1,6 @@
 image:
-  repository: cloudshield/core
-  tag: "0.1.0"
+  repository: ghcr.io/aymen-nasri/cloudshield # signed by CI; Kyverno admits nothing else here
+  tag: main
   pullPolicy: IfNotPresent
 
 replicaCount: 1
@@ -17,6 +17,16 @@ credentialsSecret: cloudshield-ingest-credentials
 enrichment: k8s
 
 serviceAccountName: cloudshield-investigator
+
+# "k8s" runs approved actions in-process as the identity in responderTokenSecret. Empty: no executor.
+executor: ""
+responderTokenSecret: ""
+
+# Verifies quarantines with real traffic. Set all three, or leave them empty to skip the check.
+trafficProbe:
+  pod: "" # namespace/pod of a peer the NetworkPolicies allow
+  tokenSecret: "" # the cloudshield-prober token
+  targetSelector: "" # key=value,... of the pods that peer may reach
 
 service:
   port: 80

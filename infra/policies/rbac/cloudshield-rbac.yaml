@@ -103,3 +103,24 @@ subjects:
   - kind: ServiceAccount
     name: cloudshield-prober
     namespace: cloudshield
+---
+# Tokens the CloudShield pod mounts to act as the responder and the prober. The pod itself runs as
+# the read-only investigator, and each API client uses only the identity for its job. They are
+# long-lived tokens in one process: the separation is by client, not by process.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudshield-responder-token
+  namespace: cloudshield
+  annotations:
+    kubernetes.io/service-account.name: cloudshield-responder
+type: kubernetes.io/service-account-token
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudshield-prober-token
+  namespace: cloudshield
+  annotations:
+    kubernetes.io/service-account.name: cloudshield-prober
+type: kubernetes.io/service-account-token
