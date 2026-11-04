@@ -87,10 +87,12 @@ def resolve_pod_context(
     node = pod.spec.node_name
     role = (
         _optional(lambda: pod_identity_role(eks, cluster, namespace, service_account), "IAM role")
-        if service_account
+        if service_account and eks is not None
         else None
     )
-    instance = _optional(lambda: instance_for_node(ec2, node), "EC2 instance") if node else None
+    instance = (
+        _optional(lambda: instance_for_node(ec2, node), "EC2 instance") if node and ec2 is not None else None
+    )
     return PodContext(
         namespace=namespace,
         pod=pod_name,

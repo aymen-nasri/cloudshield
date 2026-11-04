@@ -120,7 +120,6 @@ jobs:
       CALICO_VERSION: v3.29.1 # matches the Makefile
       FALCO_CHART_VERSION: 9.2.2
       KYVERNO_VERSION: v1.19.2
-      WEBHOOK_PORT: "8099"
     steps:
       - uses: actions/checkout@v7
       - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
@@ -143,30 +142,32 @@ jobs:
           kubectl apply -f infra/kind/probe.yaml
           kubectl -n shop rollout status deploy/checkout --timeout=180s
           kubectl -n shop wait --for=condition=Ready pod/probe --timeout=120s
-      - name: Install Kyverno and enforce the quarantine guard and image verification
+      - name: Install Kyverno and enforce the quarantine guard
         run: |
           kubectl create -f "https://github.com/kyverno/kyverno/releases/download/${KYVERNO_VERSION}/install.yaml"
           kubectl -n kyverno rollout status deploy/kyverno-admission-controller --timeout=300s
           # The deployment can report ready a few seconds before its webhook accepts connections.
           for attempt in 1 2 3 4 5 6; do
-            kubectl apply -f infra/policies/kyverno/require-quarantine-exclusion.yaml \
-              -f infra/policies/kyverno/verify-cloudshield-images.yaml && break
+            kubectl apply -f infra/policies/kyverno/require-quarantine-exclusion.yaml && break
             sleep 10
           done
-          kubectl wait --for=condition=Ready clusterpolicy/require-quarantine-exclusion \
-            clusterpolicy/verify-cloudshield-images --timeout=120s
-      - name: Install Falco (modern eBPF) with Falcosidekick posting to CloudShield on the runner
+          kubectl wait --for=condition=Ready clusterpolicy/require-quarantine-exclusion --timeout=120s
+      - name: Build this commit and deploy it with the Helm chart
+        run: bash infra/kind/deploy-cloudshield.sh
+      # This commit's image is unsigned (only main's CI signs), so enforcement starts after the deploy.
+      # The job below runs the signed image under enforcement from the start.
+      - name: Enforce image verification
         run: |
-          # The kind network's gateway is the runner itself, where scripts/lab_e2e.py serves the API.
-          gateway=$(docker network inspect kind -f '{{range .IPAM.Config}}{{.Gateway}} {{end}}' | tr ' ' '\n' | grep -m1 '\.')
-          echo "webhook: http://${gateway}:${WEBHOOK_PORT}/v1/ingest/falco"
+          kubectl apply -f infra/policies/kyverno/verify-cloudshield-images.yaml
+          kubectl wait --for=condition=Ready clusterpolicy/verify-cloudshield-images --timeout=120s
+      - name: Install Falco (modern eBPF) with Falcosidekick posting to the CloudShield Service
+        run: |
           helm repo add falcosecurity https://falcosecurity.github.io/charts
           # Pod and namespace names come from the container runtime, so the k8s metadata collector is off.
           helm install falco falcosecurity/falco --version "${FALCO_CHART_VERSION}" -n falco --create-namespace \
             -f infra/helm/falco-values.yaml \
             --set collectors.kubernetes.enabled=false \
             --set-file 'customRules.cloudshield_rules\.yaml=detections/falco/cloudshield_rules.yaml' \
-            --set falcosidekick.config.webhook.address="http://${gateway}:${WEBHOOK_PORT}/v1/ingest/falco" \
             --set falcosidekick.config.webhook.customHeaders="Authorization:Bearer lab-falco-key" \
             --wait --timeout 8m
           kubectl -n falco get pods -o wide
@@ -175,8 +176,8 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -e ".[dev,k8s]"
-      - name: Scenario S1 from a live Falco detection (real RBAC, real NetworkPolicies, real traffic)
-        run: python scripts/lab_e2e.py --alert falco --admission --port "${WEBHOOK_PORT}" --svg lab-run.svg
+      - name: Scenario S1 from a live Falco detection, against CloudShield in the cluster
+        run: python scripts/lab_e2e.py --alert falco --admission --svg lab-run.svg
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -189,6 +190,8 @@ jobs:
           kubectl get pods -A -o wide
           kubectl -n shop get networkpolicies,pods --show-labels
           kubectl get clusterpolicies || true
+          kubectl -n cloudshield describe pods -l app.kubernetes.io/name=cloudshield-core | tail -30 || true
+          kubectl -n cloudshield logs deploy/cloudshield-core --tail=80 || true
           kubectl -n falco logs -l app.kubernetes.io/name=falco -c falco --tail=60 || true
           kubectl -n falco logs -l app.kubernetes.io/name=falcosidekick --tail=60 || true
 
@@ -274,6 +277,54 @@ jobs:
             echo
             echo "Signature and CycloneDX SBOM attestation verified for \`$IDENTITY\`."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # On main: the image just signed really starts, with image verification enforced from the beginning,
+  # and an unsigned image really is refused. Pull requests can't test this: only main's CI signs.
+  signed-deploy:
+    name: signed image runs under admission control
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: ghcr
+    env:
+      KYVERNO_VERSION: v1.19.2 # matches the lab job
+    steps:
+      - uses: actions/checkout@v7
+      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        with:
+          install_only: true
+      - name: Create a cluster and enforce image verification
+        run: |
+          sudo sysctl -w fs.inotify.max_user_instances=1024 fs.inotify.max_user_watches=524288
+          kind create cluster --name signed-deploy --wait 120s
+          kubectl create -f "https://github.com/kyverno/kyverno/releases/download/${KYVERNO_VERSION}/install.yaml"
+          kubectl -n kyverno rollout status deploy/kyverno-admission-controller --timeout=300s
+          for attempt in 1 2 3 4 5 6; do
+            kubectl apply -f infra/policies/kyverno/verify-cloudshield-images.yaml && break
+            sleep 10
+          done
+          kubectl wait --for=condition=Ready clusterpolicy/verify-cloudshield-images --timeout=120s
+      - name: Deploy the signed image with the Helm chart
+        run: |
+          kubectl create namespace cloudshield
+          kubectl -n cloudshield create serviceaccount cloudshield-investigator
+          kubectl -n cloudshield create secret generic cloudshield-ingest-credentials \
+            --from-literal=CLOUDSHIELD_FALCO_TOKEN=signed-deploy-check
+          helm install cloudshield infra/helm/cloudshield -n cloudshield \
+            --set image.tag=${{ github.sha }} --wait --timeout 5m
+          kubectl -n cloudshield get pods -o jsonpath='{.items[*].spec.containers[*].image}{"\n"}' | tee images.txt
+          grep -q '^ghcr.io/aymen-nasri/cloudshield:.*@sha256:\|^ghcr.io/aymen-nasri/cloudshield@sha256:' images.txt
+      - name: An unsigned image is refused for real
+        run: |
+          if kubectl -n cloudshield run unsigned --image=busybox:1.37.0 --restart=Never 2> refused.txt; then
+            echo "an unsigned image was admitted"; exit 1
+          fi
+          cat refused.txt
+          grep -q 'no signatures found' refused.txt
+      - name: Cluster state (on failure)
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide
+          kubectl -n cloudshield describe pods | tail -30 || true
 
   # Runs only on main and only once the AWS lab exists (AWS_ROLE_ARN repository variable set).
   publish:
