@@ -16,3 +16,5 @@ Back to the [project README](../README.md).
 python scripts/demo.py                       # no setup needed
 make lab-up && python scripts/lab_e2e.py     # needs Docker, kind, kubectl and Helm
 ```
+
+`lab_e2e.py` turns on the traffic probe through the same settings a deployment uses (`CLOUDSHIELD_PROBE_POD`, `CLOUDSHIELD_PROBE_TOKEN_FILE`, `CLOUDSHIELD_PROBE_TARGET_SELECTOR`), and fails if the probe was skipped instead of passing.

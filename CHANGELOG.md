@@ -2,6 +2,14 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- The traffic probe can be turned on through settings (`CLOUDSHIELD_PROBE_POD`, `CLOUDSHIELD_PROBE_TOKEN_FILE`, `CLOUDSHIELD_PROBE_TARGET_SELECTOR`). Half a configuration fails at startup. The kind lab uses these settings and fails if the probe was skipped.
+
+### Fixed
+- The traffic probe could report a false pass. Quarantining a pod its peer was never allowed to reach failed to connect and counted as blocked. A block now counts only if the peer could connect just before the quarantine, and pods outside the probe's configured reach are skipped in both directions.
+
 ## [0.3.0] - 2026-11-04
 
 Scenario S1 now runs for real: on every pull request, a live attack in a kind cluster is detected by
