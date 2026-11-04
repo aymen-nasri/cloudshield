@@ -53,6 +53,10 @@ LEAKY = (
     ROOT / "infra" / "policies" / "kyverno" / "tests" / "require-quarantine-exclusion" / "leaky-allow.yaml"
 )
 CLUSTER, NS, PROBE = "kind-cloudshield-lab", "shop", "probe"
+IMAGE_NS, POLICY = "cloudshield", "verify-cloudshield-images"
+SIGNED_IMAGE = "ghcr.io/aymen-nasri/cloudshield:main"
+UNSIGNED_IMAGE = "busybox:1.37.0"
+OTHER_SIGNER_IMAGE = "ghcr.io/sigstore/cosign/cosign:v2.4.1"  # keyless-signed, by Sigstore's workflow
 
 
 def kubectl(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -192,6 +196,46 @@ def admission_check(net: Any) -> tuple[bool, bool]:
     except ApiException:
         admitted = False
     return rejected, admitted
+
+
+def admit_image(core: Any, image: str) -> tuple[bool, str]:
+    """Would the API server admit a pod with this image in the cloudshield namespace? (dry run)"""
+    pod = {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {"generateName": "lab-image-check-", "namespace": IMAGE_NS},
+        "spec": {"containers": [{"name": "check", "image": image}]},
+    }
+    try:
+        core.create_namespaced_pod(IMAGE_NS, pod, dry_run="All")
+    except ApiException as exc:
+        return False, exc.body or str(exc)
+    return True, ""
+
+
+def image_checks(core: Any) -> list[tuple[str, str, bool, str]]:
+    """Signed by this repo's workflow: admitted. Unsigned, or signed by someone else: rejected.
+
+    The admitted image is the control: it shows the rejections aren't just network failures. Retries
+    briefly, because a just-applied policy takes a moment to reach the webhook, and Kyverno calls
+    the registry and Sigstore over the network.
+    """
+    cases = [
+        ("this repo's signed image", SIGNED_IMAGE, True),
+        ("unsigned image", UNSIGNED_IMAGE, False),
+        ("signed, but by someone else", OTHER_SIGNER_IMAGE, False),
+    ]
+    results = []
+    for label, image, want_admitted in cases:
+        admitted, reason = admit_image(core, image)
+        for _ in range(9):
+            if admitted is want_admitted and (admitted or POLICY in reason):
+                break
+            time.sleep(5)
+            admitted, reason = admit_image(core, image)
+        by_policy = admitted or POLICY in reason
+        results.append((label, image, admitted is want_admitted and by_policy, reason))
+    return results
 
 
 def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
@@ -351,11 +395,17 @@ def run(alert: str, port: int, admission: bool) -> tuple[Transcript, list[str]]:
             "rejected" if leaky else "ADMITTED", leaky)  # fmt: skip
         row("", "admit", "the same policy with the exclusion", "admitted" if guarded else "REJECTED", guarded)
         note("a leaky allow-policy would let a quarantined pod keep its traffic")
+        for label, image, ok, reason in image_checks(client.CoreV1Api()):
+            want = "admitted" if image == SIGNED_IMAGE else "rejected"
+            row("13" if image == SIGNED_IMAGE else "", "image", label, want if ok else f"NOT {want}", ok)
+            note(image)
+            if not ok or image == OTHER_SIGNER_IMAGE:
+                note(f"kyverno: {' '.join(reason.split())[:150]}")
 
     audit = api.get("/v1/audit", params={"case_id": case["case_id"]}).json()
     intact = audit["chain_intact"]
     chain = "chain intact" if intact else "BROKEN"
-    row("13" if admission else "12", "audit", f"{len(audit['records'])} hash-chained records", chain, intact)
+    row("14" if admission else "12", "audit", f"{len(audit['records'])} hash-chained records", chain, intact)
     out.say("")
     verdict = f"{len(failures)} check(s) FAILED" if failures else "all checks passed"
     out.say(verdict, "bad" if failures else "good")

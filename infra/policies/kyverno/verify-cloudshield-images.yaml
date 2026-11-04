@@ -1,5 +1,7 @@
-# Only CloudShield images signed by this repository's GitHub Actions workflow may run in the
-# cloudshield namespace (keyless Cosign signatures, verified against Sigstore's transparency log).
+# Only images signed by this repository's GitHub Actions workflow on main may run in the cloudshield
+# namespace (keyless Cosign signatures, verified against Sigstore's transparency log). It matches every
+# image: a list of CloudShield's own names would let an image under any other name through unchecked.
+# The kind lab job proves it (scripts/lab_e2e.py --admission).
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -14,10 +16,9 @@ spec:
               kinds: [Pod]
               namespaces: [cloudshield]
       verifyImages:
-        - failureAction: Audit
+        - failureAction: Enforce
           imageReferences:
-            - "ghcr.io/aymen-nasri/cloudshield*"
-            - "*.dkr.ecr.*.amazonaws.com/cloudshield/*"
+            - "*"
           attestors:
             - entries:
                 - keyless:
