@@ -222,6 +222,57 @@ jobs:
           name: sbom
           path: sbom.cdx.json
 
+  # On main: publish to GitHub's container registry, sign keylessly, attach the SBOM as a signed
+  # attestation, then verify both the way a consumer (or Kyverno) would. Needs no AWS account.
+  ghcr:
+    name: publish, sign and verify on GHCR
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [image, secrets, lab]
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io with the workflow's own token
+      id-token: write # keyless Cosign signing with the workflow's OIDC identity
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/heads/main
+      ISSUER: https://token.actions.githubusercontent.com
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build and push
+        id: push
+        run: |
+          docker build -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:main" .
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:main"
+          echo "digest=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE:${{ github.sha }}")" >> "$GITHUB_OUTPUT"
+      - name: SBOM of the pushed image (CycloneDX)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          format: cyclonedx
+          output: sbom.cdx.json
+      - uses: sigstore/cosign-installer@v3
+      - name: Keyless sign, and attach the SBOM as a signed attestation
+        run: |
+          cosign sign --yes "${{ steps.push.outputs.digest }}"
+          cosign attest --yes --type cyclonedx --predicate sbom.cdx.json "${{ steps.push.outputs.digest }}"
+      - name: Verify the signature and the attestation against this workflow's identity
+        run: |
+          cosign verify "${{ steps.push.outputs.digest }}" \
+            --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" > /dev/null
+          cosign verify-attestation "${{ steps.push.outputs.digest }}" --type cyclonedx \
+            --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" > /dev/null
+          {
+            echo "### Signed image"
+            echo
+            echo "\`${{ steps.push.outputs.digest }}\`"
+            echo
+            echo "Signature and CycloneDX SBOM attestation verified for \`$IDENTITY\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Runs only on main and only once the AWS lab exists (AWS_ROLE_ARN repository variable set).
   publish:
     name: sign and push to ECR
