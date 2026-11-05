@@ -12,6 +12,7 @@ moto_server -H 127.0.0.1 -p 5000 >moto.log 2>&1 &
 moto_pid=$!
 cleanup() {
   kill "$moto_pid" 2>/dev/null || true
+  docker rm -f stepfunctions-local >/dev/null 2>&1 || true
   rm -rf "$lab/emulator_override.tf" "$lab/.terraform" "$lab/.terraform.lock.hcl" "$lab"/terraform.tfstate*
 }
 trap cleanup EXIT
@@ -64,4 +65,14 @@ tofu -chdir="$lab" apply -input=false -auto-approve -no-color \
   -target=aws_s3_bucket_server_side_encryption_configuration.evidence \
   -target=aws_s3_bucket_public_access_block.evidence
 
-CLOUDSHIELD_EMULATED_AWS=$endpoint python -m pytest tests/test_emulated_aws.py -v -rs --no-header -p no:cacheprovider
+# AWS's own local Step Functions, running our real state machine file. The tests serve its Lambda calls.
+docker run -d --name stepfunctions-local --network host \
+  -e LAMBDA_ENDPOINT=http://127.0.0.1:5050 -e AWS_DEFAULT_REGION=us-east-1 \
+  amazon/aws-stepfunctions-local:2.0.0 >/dev/null
+for _ in $(seq 1 30); do
+  curl -s -o /dev/null http://127.0.0.1:8083 && break
+  sleep 1
+done
+
+CLOUDSHIELD_EMULATED_AWS=$endpoint CLOUDSHIELD_STEPFUNCTIONS_LOCAL=http://127.0.0.1:8083 \
+  python -m pytest tests/test_emulated_aws.py tests/test_emulated_stepfunctions.py -v -rs --no-header -p no:cacheprovider
