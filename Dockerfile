@@ -12,6 +12,8 @@ LABEL org.opencontainers.image.source=https://github.com/aymen-nasri/cloudshield
 RUN useradd --system --uid 10001 --no-create-home cloudshield
 COPY --from=build /install /usr/local
 COPY runbooks /opt/cloudshield/runbooks
+# A named volume mounted here takes this ownership, so the non-root process can archive evidence.
+RUN mkdir /evidence && chown 10001 /evidence
 ENV CLOUDSHIELD_RUNBOOKS_DIR=/opt/cloudshield/runbooks
 USER 10001
 EXPOSE 8080

@@ -17,7 +17,7 @@ services:
       # The core API applies services/cases/migrations on startup.
       CLOUDSHIELD_DATABASE_URL: postgresql://cloudshield:${POSTGRES_PASSWORD:?set in .env}@postgres:5432/cloudshield
     volumes:
-      - ./.local-evidence:/evidence
+      - evidence:/evidence
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,3 +47,4 @@ services:
 
 volumes:
   pgdata:
+  evidence:
