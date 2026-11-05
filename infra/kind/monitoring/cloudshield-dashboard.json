@@ -1,0 +1,90 @@
+{
+  "uid": "cloudshield",
+  "title": "CloudShield operations",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Sources silent (1 = no alerts recently)",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "cloudshield_source_degraded", "legendFormat": "{{source}}" }]
+    },
+    {
+      "id": 2,
+      "title": "Alerts received, by result",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 0, "w": 16, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (source, result) (increase(cloudshield_ingest_events_total[5m]))",
+          "legendFormat": "{{source}} {{result}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Ingest lag, 95th percentile",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, source) (rate(cloudshield_ingest_lag_seconds_bucket[5m])))",
+          "legendFormat": "{{source}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Response actions, by outcome",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (cloudshield_response_executions_total)",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Verification checks, by result (skipped proves nothing)",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (check, result) (cloudshield_verification_checks_total)",
+          "format": "table",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Time from proposal to finished, 95th percentile",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, action_type) (rate(cloudshield_response_duration_seconds_bucket[30m])))",
+          "legendFormat": "{{action_type}}"
+        }
+      ]
+    }
+  ]
+}

@@ -22,6 +22,7 @@ digest = lambda token: hashlib.sha256(token.encode()).hexdigest()
 print(json.dumps({
     digest("alice-lab"): {"id": "analyst:alice", "roles": ["analyst"]},
     digest("bob-lab"): {"id": "analyst:bob", "roles": ["incident-responder"]},
+    digest("prometheus-lab"): {"id": "service:prometheus", "roles": ["viewer"]},
 }))')
 kubectl -n cloudshield create secret generic cloudshield-ingest-credentials \
   --from-literal=CLOUDSHIELD_FALCO_TOKEN=lab-falco-key \

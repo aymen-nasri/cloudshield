@@ -1,0 +1,30 @@
+groups:
+  - name: cloudshield
+    rules:
+      - alert: CloudShieldDown
+        expr: up{job="cloudshield"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: Prometheus cannot scrape CloudShield.
+      - alert: SensorSilent
+        expr: cloudshield_source_degraded{source="falco"} == 1
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: No alerts from {{ $labels.source }}. Silence does not mean no attacks.
+      - alert: VerificationFailed
+        expr: increase(cloudshield_verification_checks_total{result="failed"}[10m]) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: The {{ $labels.check }} check failed after a response action.
+      - alert: VerificationSkipped
+        expr: increase(cloudshield_verification_checks_total{check="traffic_probe",result="skipped"}[10m]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: A response action finished without its traffic check proving anything.
+      - alert: ResponseActionFailed
+        expr: increase(cloudshield_response_executions_total{outcome="failed"}[10m]) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: A response action failed and needs a person.
