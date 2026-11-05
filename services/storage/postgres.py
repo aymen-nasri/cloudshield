@@ -398,6 +398,25 @@ class PostgresProposalStore:
         except errors.UniqueViolation as exc:
             raise DuplicateApproval(approval.approver) from exc
 
+    def renew_approval(self, approval: Approval) -> None:
+        with self.db.pool.connection() as conn:
+            conn.execute(
+                "UPDATE approval SET approver_roles = %s, decision = %s, justification = %s,"
+                " bound_hash = %s, decided_at = %s WHERE proposal_id = %s AND approver = %s",
+                (
+                    sorted(approval.approver_roles),
+                    approval.decision,
+                    approval.justification,
+                    approval.bound_hash,
+                    approval.decided_at,
+                    approval.proposal_id,
+                    approval.approver,
+                ),
+            )
+
+    def in_state(self, state: ProposalState) -> list[ProposalRecord]:
+        return self._load("state = %s", state.value)
+
     def start_execution(self, proposal_id: str, execution: Execution) -> None:
         try:
             with self.db.pool.connection() as conn:

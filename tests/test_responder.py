@@ -56,7 +56,9 @@ class FakePodApi:
     def get_pod(self, namespace, name):
         return copy.deepcopy(self.pod) if name == self.pod["metadata"]["name"] else None
 
-    def patch_pod_labels(self, namespace, name, labels, *, dry_run):
+    def patch_pod_labels(self, namespace, name, labels, *, uid, dry_run):
+        if uid != self.pod["metadata"]["uid"]:
+            raise quarantine.TargetReplaced(name)
         self.patches.append((labels, dry_run))
         if not dry_run:
             for k, v in labels.items():
@@ -80,6 +82,76 @@ def test_apply_is_idempotent():
     assert apply_quarantine(api, TARGET, dry_run=False).status == "applied"
     assert apply_quarantine(api, TARGET, dry_run=False).status == "already_applied"
     assert len(api.patches) == 1
+
+
+def test_the_label_patch_is_tested_against_the_uid_first():
+    assert quarantine.label_patch("uid-1", {QUARANTINE_LABEL: "true"}) == [
+        {"op": "test", "path": "/metadata/uid", "value": "uid-1"},
+        {"op": "add", "path": "/metadata/labels/cloudshield.io~1quarantine", "value": "true"},
+    ]
+    assert quarantine.label_patch("uid-1", {QUARANTINE_LABEL: None})[1] == {
+        "op": "remove",
+        "path": "/metadata/labels/cloudshield.io~1quarantine",
+    }
+
+
+class _Refusing:
+    """The Kubernetes client, refusing every patch with this status."""
+
+    def __init__(self, status, current_uid):
+        self.status, self.current_uid = status, current_uid
+        self.bodies = []
+
+    def patch_namespaced_pod(self, name, namespace, body, dry_run=None):
+        from kubernetes.client.exceptions import ApiException
+
+        self.bodies.append(body)
+        raise ApiException(status=self.status)
+
+
+def _real_api(refusing):
+    api = quarantine.KubernetesPodApi.__new__(quarantine.KubernetesPodApi)
+    api._core = refusing
+    uid = refusing.current_uid
+    api.get_pod = lambda namespace, name: {"metadata": {"uid": uid}} if uid else None
+    return api
+
+
+@pytest.mark.parametrize(
+    ("status", "current"), [(422, "uid-of-the-replacement"), (409, "uid-of-the-replacement"), (404, None)]
+)
+def test_a_refused_patch_on_a_replaced_pod_is_a_stale_target(status, current):
+    pytest.importorskip("kubernetes")
+    api = _real_api(_Refusing(status, current))
+    with pytest.raises(quarantine.TargetReplaced):
+        api.patch_pod_labels("shop", "p", {QUARANTINE_LABEL: "true"}, uid="uid-1", dry_run=False)
+
+
+def test_a_refused_patch_on_the_same_pod_is_a_real_error():
+    """It could be anything, such as a pod with no labels at all, so it must not look like a stale target."""
+    kubernetes = pytest.importorskip("kubernetes")
+    api = _real_api(_Refusing(422, "uid-1"))
+    with pytest.raises(kubernetes.client.exceptions.ApiException):
+        api.patch_pod_labels("shop", "p", {QUARANTINE_LABEL: "true"}, uid="uid-1", dry_run=False)
+
+
+def test_removing_a_label_that_is_already_gone_is_a_no_op():
+    api = FakePodApi()
+    assert remove_quarantine(api, TARGET, dry_run=False).status == "removed"
+    assert api.patches == []
+
+
+def test_a_pod_replaced_between_the_read_and_the_patch_is_not_labelled():
+    class ReplacedAfterRead(FakePodApi):
+        def get_pod(self, namespace, name):
+            pod = super().get_pod(namespace, name)
+            self.pod["metadata"]["uid"] = "uid-of-the-replacement"
+            return pod
+
+    api = ReplacedAfterRead()
+    assert apply_quarantine(api, TARGET, dry_run=False).status == "stale_target"
+    assert QUARANTINE_LABEL not in api.pod["metadata"]["labels"]
+    assert api.patches == []
 
 
 def test_stale_target_is_refused():
