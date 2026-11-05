@@ -48,7 +48,7 @@ with grounded AI investigations and response actions that cannot bypass policy o
 
 <p align="center"><img src="docs/demo.svg" alt="Terminal output of scripts/demo.py: two alerts become one case, a quarantine is proposed, two unsafe approvals are refused, the approved action runs once and is verified, and the audit chain is intact" width="820"/></p>
 
-**On a real cluster.** The [`kind lab` CI job](https://github.com/aymen-nasri/cloudshield/actions/workflows/ci.yml?query=branch%3Amain) builds a three-node kind cluster with Calico and Falco, installs this commit's CloudShield as a pod with its Helm chart, and runs [`scripts/lab_e2e.py`](scripts/lab_e2e.py) against it. A download-and-run (`wget … | sh`) is executed inside a live checkout pod. Falco detects it, Falcosidekick posts the alert to CloudShield's webhook, and CloudShield opens a critical case and quarantines the pod as its responder service account. A probe pod then shows the pod is cut off while its sibling replica still answers, and that rollback restores traffic. The API server refuses six least-privilege checks, and Kyverno rejects both a network rule that would break the quarantine and any image this repo's CI didn't sign. It then checks that the Prometheus metrics agree with what the run did. Locally: `make lab-up && make lab-e2e`.
+**On a real cluster.** The [`kind lab` CI job](https://github.com/aymen-nasri/cloudshield/actions/workflows/ci.yml?query=branch%3Amain) builds a three-node kind cluster with Calico, Falco, PostgreSQL, Prometheus and Grafana, installs this commit's CloudShield with its Helm chart as two pods (a read-only API and a separate responder), and runs [`scripts/lab_e2e.py`](scripts/lab_e2e.py) against it. A download-and-run (`wget … | sh`) is executed inside a live checkout pod. Falco detects it, Falcosidekick posts the alert to CloudShield's webhook, and CloudShield opens a critical case and quarantines the pod as its responder service account. A probe pod then shows the pod is cut off while its sibling replica still answers, and that rollback restores traffic. The API server refuses six least-privilege checks, and Kyverno rejects both a network rule that would break the quarantine and any image this repo's CI didn't sign. It then checks that the numbers from the run come back through Prometheus and Grafana, and that the case and audit chain survive a restart. Locally: `make lab-up && make lab-e2e`.
 
 <p align="center"><img src="docs/lab-run.svg" alt="Terminal output of scripts/lab_e2e.py against CloudShield running as a pod on a kind cluster: a wget-pipe-to-shell attack in a live checkout pod is detected by Falco and becomes a critical case, the pod is quarantined by the responder identity, traffic to it is blocked while another replica stays reachable, rollback restores it, six RBAC overreach attempts are refused, Kyverno rejects a leaky allow-policy and any image this repository's CI didn't sign, the audit chain is intact, and the Prometheus metrics agree with the run" width="746"/></p>
 
@@ -63,14 +63,14 @@ What exists today, in one place. ✅ **built and tested** here · 🧩 **written
 | Area | ✅ Built and tested | 🧩 Written as code | 📐 Planned |
 |---|---|---|---|
 | **Ingestion** | Falco, GuardDuty and Wazuh adapters to OCSF; fail-closed producer auth; dedup; raw evidence with SHA-256; sensor coverage | EventBridge → SQS → consumer in AWS | CloudTrail, Security Hub and VPC Flow Logs ingestion |
-| **Cases** | Correlation rules C-01 to C-04, timelines, entity graph, hash-chained audit log, PostgreSQL | — | OpenSearch search |
+| **Cases** | Correlation rules C-01 to C-04, timelines, entity graph, hash-chained audit log, PostgreSQL in the kind lab, surviving a restart | — | OpenSearch search |
 | **AI investigation** | Cited, validated investigations; prompt-injection defenses; runbook retrieval; offline baseline model; evaluation harness | Bedrock client | A configured Bedrock Guardrail, vector search, a multi-step read-only agent |
-| **Response** | Policy gate, hash-bound expiring approvals, quarantine and rollback **on a live kind cluster**, verified by CloudShield's own traffic probe | Step Functions + Lambda path for AWS | More actions: revoke IAM sessions, isolate an EC2 instance |
+| **Response** | Policy gate, hash-bound expiring approvals, a separate responder pod that re-checks policy itself, quarantine and rollback **on a live kind cluster**, verified by CloudShield's own traffic probe | Step Functions + Lambda path for AWS | More actions: revoke IAM sessions, isolate an EC2 instance |
 | **Kubernetes** | CloudShield running as a pod from its Helm chart, Falco (modern eBPF) detecting a live attack in the lab, Calico NetworkPolicies, least-privilege RBAC checked against a live API server, Kyverno admission rejecting a leaky allow-policy and any image this repo's CI didn't sign | EKS | Cilium/Hubble |
 | **AWS** | GuardDuty findings, Pod Identity and EC2 lookups (against simulated AWS) | OpenTofu lab: VPC, EKS, GuardDuty, S3 Object Lock, KMS, budgets, GitHub OIDC | Lab bring-up on a real account |
 | **Delivery** | Tests on PostgreSQL, ruff, mypy, Gitleaks, Trivy, SBOM, infrastructure validation, kind end-to-end job, dependency review, Dependabot, images on GHCR signed with Cosign and carrying a signed SBOM, and the signed image started on a cluster with image verification enforced | ECR push | Branch protection, Argo CD |
 | **Analyst tools** | Incident console, post-incident report | — | Chat approvals (Slack/Teams) |
-| **Operations** | Sensor coverage heartbeat, Prometheus `/metrics` (alerts, ingest lag, response outcomes, verification checks) checked against a real run | Dead-letter queue alarm | Prometheus server, Grafana, OpenTelemetry |
+| **Operations** | Sensor coverage heartbeat, Prometheus `/metrics` (alerts, ingest lag, response outcomes, verification checks) checked against a real run, Prometheus scraping it with alert rules, Grafana dashboard reading the same numbers | Dead-letter queue alarm | Alertmanager, OpenTelemetry |
 
 The deep-dive pages in [`docs/`](docs) use the same markers in every technology table. What is planned next is in the [Roadmap](#roadmap).
 
@@ -151,7 +151,7 @@ CloudShield does **not** reinvent detection, a SIEM, or AWS's own AI investigati
 | **Data engineering** | OCSF normalization, idempotent ingestion, PostgreSQL modeling and migrations | 🧩 dead-letter queue · 📐 OpenSearch |
 | **AI engineering** | Runbook retrieval, structured outputs, citation enforcement, prompt-injection defenses, evaluation harness | 🧩 Bedrock client · 📐 vector search, LangGraph, MCP |
 | **Software engineering** | FastAPI services, Pydantic contracts, state machines, hash-chained audit log, REST API and console | — |
-| **DevOps** | GitHub Actions, Docker, a kind cluster built and tested in CI, Prometheus metrics | 🧩 OpenTofu, Ansible · 📐 Argo CD, Prometheus server, Grafana, OpenTelemetry |
+| **DevOps** | GitHub Actions, Docker Compose and a kind cluster tested in CI, Helm, Prometheus and Grafana | 🧩 OpenTofu, Ansible · 📐 Argo CD, OpenTelemetry |
 | **DevSecOps** | Gitleaks, Trivy, signed SBOM, keyless Cosign signing, dependency review, Dependabot, Kyverno admission, infrastructure validation | 🧩 GitHub OIDC to AWS · 📐 branch protection |
 
 > **How this goes beyond a typical SOC-automation lab:** a "Wazuh → SOAR → block IP" pipeline proves alert collection and automated containment. CloudShield goes further in three ways: **cross-layer resource context**, **investigation quality with provenance**, and **safety-aware, reversible, auditable response**.
@@ -258,7 +258,7 @@ sequenceDiagram
     participant AI as AI investigator
     participant Pol as Policy engine
     actor An as Analyst
-    participant Exe as Executor (inside the CloudShield pod in the lab)
+    participant Exe as Responder (its own pod in the lab)
     participant Ver as Verifier + reports
 
     Pod->>Falco: unexpected process spawned (syscall)
@@ -328,7 +328,6 @@ Designed and scheduled, not built yet. Each one moves to ✅ in the [Build statu
 
 | Feature | What it adds | Milestone |
 |---|---|---|
-| **Prometheus server and a Grafana dashboard** | Scraping, history and dashboards for the metrics CloudShield already exposes | M2 |
 | **AWS lab bring-up** | GuardDuty → EventBridge → SQS → CloudShield on a real account, with budget alarms | M1 |
 | **Bedrock with a Guardrail** | The evaluation harness scored against a real model before it is trusted | M3 |
 | **OpenSearch** | Search across events, and similar past cases for the investigator | M2 |
@@ -387,7 +386,7 @@ cloudshield/
 │   └── fixtures/         # labeled, replayable incidents (S1, S2, S3, S6, S8)
 ├── infra/
 │   ├── tofu/envs/lab/    # OpenTofu: VPC, EKS, GuardDuty → EventBridge → SQS, S3 evidence, budgets, CI OIDC
-│   ├── kind/             # local lab cluster and traffic probe
+│   ├── kind/             # lab cluster, traffic probe, PostgreSQL, Prometheus and Grafana, deploy scripts
 │   ├── k8s/              # demo "shop" application
 │   ├── helm/             # CloudShield chart, Falco values
 │   ├── ansible/          # Linux host hardening, Wazuh agent, signed Wazuh integration
@@ -422,7 +421,7 @@ The store contract tests also run against PostgreSQL when a disposable database 
 CLOUDSHIELD_TEST_DATABASE_URL=postgresql://user@localhost:5432/cloudshield_test pytest -m postgres
 ```
 
-**Run the core API and replay scenario S1:**
+**Run the core API and replay scenario S1** (CI runs these steps on every pull request, in [`scripts/compose_check.sh`](scripts/compose_check.sh)):
 
 ```bash
 cp .env.example .env # then set real values
@@ -445,7 +444,7 @@ cosign verify ghcr.io/aymen-nasri/cloudshield:main \
 **Local Kubernetes lab:**
 
 ```bash
-make lab-up          # kind + Calico + demo "shop" app + quarantine-ready NetworkPolicies + RBAC + Falco
+make lab-up          # kind + Calico + shop app + NetworkPolicies + RBAC + Kyverno + PostgreSQL + CloudShield + Prometheus + Grafana + Falco
 make lab-e2e         # scenario S1 on the cluster, with real traffic probes (CI runs it on every PR)
 make lab-down
 ```

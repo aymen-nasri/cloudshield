@@ -128,7 +128,7 @@ spec:
 
 ### Required controls
 
-- **Separation of privileges:** the LLM has read-only tools; the executor has action-specific IAM/RBAC and nothing else.
+- **Separation of privileges:** the LLM has read-only tools; the executor has action-specific IAM/RBAC and nothing else. In the lab it's a separate pod: the API holds no Kubernetes write access and calls it with a shared token, and the responder re-checks policy itself.
 - **Structured action schemas** with exact resource identifiers, environment and expiry.
 - **An independent policy engine** that checks target allowlists, change windows, approver authorization and risky dependencies.
 - **Explicit dry-run.** Failing to approve means no action.
