@@ -360,7 +360,7 @@ def create_app(
             worker.join(settings.findings_wait_seconds + 5)  # it can be in the middle of a long poll
         stores.close()
 
-    app = FastAPI(title="CloudShield", version="0.6.0", lifespan=lifespan)
+    app = FastAPI(title="CloudShield", version="0.7.0", lifespan=lifespan)
     app.include_router(
         build_ingestion_router(pipeline, adapters, settings.credentials, coverage, settings.analysts, metrics)
     )

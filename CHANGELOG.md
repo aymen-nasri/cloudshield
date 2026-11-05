@@ -2,7 +2,9 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.7.0] - 2026-11-05
+
+Fixes nine problems found by asking what happens when each step fails, and connects the app to its AWS paths. Nothing here has run on real AWS, EKS or Bedrock.
 
 ### Added
 - **The app can now use its AWS paths.** `CLOUDSHIELD_EVIDENCE_BUCKET` and `CLOUDSHIELD_EVIDENCE_KMS_KEY_ID` keep evidence in S3, and `CLOUDSHIELD_FINDINGS_QUEUE_URL` runs a worker that reads GuardDuty findings from SQS. Both existed and were tested, but nothing started them. Findings from the queue now count toward sensor coverage and the ingest metrics. This has run on the Moto emulator only, not on real AWS.
@@ -138,6 +140,7 @@ code and in CI. It has not yet run on a real cluster or AWS account (see the REA
   Trivy image scan and SBOM, and infrastructure validation (tofu validate, helm lint, kubeconform,
   kyverno test, Ansible syntax check).
 
+[0.7.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.7.0
 [0.6.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.6.0
 [0.5.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.5.0
 [0.4.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.4.0
