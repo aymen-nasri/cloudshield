@@ -9,6 +9,7 @@ All notable changes to CloudShield. The format follows [Keep a Changelog](https:
 - The Kyverno image policy runs in the kind lab in Enforce mode. In the `cloudshield` namespace, the lab checks that the image signed by this repository's workflow is admitted, an unsigned image is rejected (`no signatures found`), and an image signed by someone else is rejected (`subject mismatch`).
 - CloudShield runs as a pod in the kind lab, installed by its Helm chart from this commit's image, and Falcosidekick posts to its Service. The pod runs as the read-only investigator and mounts separate tokens for the responder and the prober. The lab no longer runs the API on the CI machine.
 - On `main`, a new job deploys the image just signed with image verification enforced from the start, and checks that an unsigned image is refused for real.
+- `GET /metrics` reports alerts by source and result, ingest lag, source heartbeat age and coverage, response outcomes and duration, and verification checks passed, failed or skipped. It needs a login, and label values come only from fixed lists in the code. The kind lab compares it with what the run just did.
 
 ### Changed
 - With no AWS region, the IAM role and EC2 lookups are off rather than failing at startup. The Helm chart's default image is now the signed one on GHCR.

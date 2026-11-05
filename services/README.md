@@ -16,7 +16,7 @@ ingestion/  ->  enrichment/  ->  correlation/  ->  cases/  ->  investigator/  ->
 | Package | What it does | Key files | Tested in |
 |---|---|---|---|
 | [`common/`](common) | Pydantic contracts shared by everything: `NormalizedEvent`, `Investigation`, `ResponseProposal` | `models.py` | every test |
-| [`core/`](core) | App factory, settings from the environment, analyst authentication | `app.py`, `auth.py` | `test_api.py` |
+| [`core/`](core) | App factory, settings from the environment, analyst authentication, Prometheus metrics | `app.py`, `auth.py`, `metrics.py` | `test_api.py`, `test_route_auth.py`, `test_metrics.py` |
 | [`ingestion/`](ingestion) | Source adapters (Falco, GuardDuty, Wazuh) to OCSF, fail-closed producer auth, dedup, raw evidence with SHA-256, SQS worker, sensor coverage | `adapters/`, `pipeline.py`, `auth.py`, `evidence.py` | `test_adapters.py`, `test_ingestion_and_correlation.py`, `test_coverage.py` |
 | [`enrichment/`](enrichment) | Read-only lookups pod → deployment → service account → IAM role → EC2 instance, plus the entity graph | `context.py`, `enricher.py`, `graph.py` | `test_enrichment.py` |
 | [`correlation/`](correlation) | Rules C-01 to C-04: join by pod UID, instance or IAM principal; never across accounts or clusters | `engine.py` | `test_ingestion_and_correlation.py`, `test_scenarios.py` |

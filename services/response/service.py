@@ -66,6 +66,7 @@ class ResponseService:
         environment: str,
         proposal_ttl: timedelta = timedelta(hours=1),
         clock: Callable[[], datetime] = utcnow,
+        on_finished: Callable[[ProposalRecord], None] | None = None,
     ) -> None:
         self.proposals = proposals
         self.cases = cases
@@ -75,6 +76,7 @@ class ResponseService:
         self.environment = environment
         self.proposal_ttl = proposal_ttl
         self.clock = clock
+        self.on_finished = on_finished
         # One workflow step at a time per process; the database constraints cover the rest.
         self._lock = threading.Lock()
 
@@ -96,6 +98,10 @@ class ResponseService:
             f"proposal.{new.value}",
             {"case_id": record.proposal.case_id, "proposal_id": record.proposal.proposal_id, **details},
         )
+
+    def _finished(self, record: ProposalRecord) -> None:
+        if self.on_finished:
+            self.on_finished(record)
 
     def _require(self, record: ProposalRecord, *states: S) -> None:
         if record.state not in states:
@@ -304,6 +310,7 @@ class ResponseService:
                 self.proposals.finish_execution(proposal_id, execution)
                 record.execution = execution
                 self._move(record, S.FAILED, "response-service", error=str(exc), escalate="on-call")
+                self._finished(record)
                 return record
 
             succeeded = result.status in ("applied", "already_applied", "removed") and report.passed
@@ -325,6 +332,7 @@ class ResponseService:
                 checks=report.checks,
                 **({} if succeeded else {"escalate": "on-call"}),
             )
+            self._finished(record)
             return record
 
     def get(self, proposal_id: str) -> ProposalRecord:

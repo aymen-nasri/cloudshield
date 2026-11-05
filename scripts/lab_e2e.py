@@ -36,6 +36,7 @@ import httpx  # noqa: E402
 import yaml  # noqa: E402
 from kubernetes import client, config  # noqa: E402
 from kubernetes.client.exceptions import ApiException  # noqa: E402
+from prometheus_client.parser import text_string_to_metric_families  # noqa: E402
 
 from demo import Transcript, to_svg  # noqa: E402
 
@@ -221,6 +222,17 @@ def image_checks(core: Any) -> list[tuple[str, str, bool, str]]:
     return results
 
 
+def metric_values(api: httpx.Client) -> dict[tuple[str, tuple[tuple[str, str], ...]], float]:
+    """Everything /metrics reports, keyed by sample name and labels."""
+    response = api.get("/metrics")
+    response.raise_for_status()
+    return {
+        (sample.name, tuple(sorted(sample.labels.items()))): sample.value
+        for family in text_string_to_metric_families(response.text)
+        for sample in family.samples
+    }
+
+
 @contextmanager
 def deployed_api() -> Iterator[httpx.Client]:
     """The API as it runs in the cluster, through a port-forward to its Service."""
@@ -401,6 +413,40 @@ def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, lis
     intact = audit["chain_intact"]
     chain = "chain intact" if intact else "BROKEN"
     row("14" if admission else "12", "audit", f"{len(audit['records'])} hash-chained records", chain, intact)
+
+    values = metric_values(api)
+    quarantine, rollback = "k8s.pod.quarantine_label", "k8s.pod.remove_quarantine_label"
+    verified = sum(
+        values.get(
+            ("cloudshield_response_executions_total", (("action_type", a), ("outcome", "verified"))), 0
+        )
+        for a in (quarantine, rollback)
+    )
+    probes = values.get(
+        ("cloudshield_verification_checks_total", (("check", "traffic_probe"), ("result", "passed"))), 0
+    )
+    accepted = values.get(
+        ("cloudshield_ingest_events_total", (("result", "accepted"), ("source", "falco"))), 0
+    )
+    lag = values.get(("cloudshield_ingest_lag_seconds_count", (("source", "falco"),)), 0)
+    degraded = values.get(("cloudshield_source_degraded", (("source", "falco"),)))
+    measured = (
+        verified == 2
+        and probes == 2
+        and accepted >= case["event_count"]
+        and lag >= accepted  # lag is recorded first, and alerts keep arriving during the scrape
+        and degraded == 0
+    )
+    row(
+        "15",
+        "metrics",
+        "/metrics agrees with what just happened",
+        "agrees" if measured else "DISAGREES",
+        measured,
+    )
+    note(
+        f"{accepted:.0f} alerts accepted, {verified:.0f} actions verified, {probes:.0f} traffic probes passed"
+    )
     out.say("")
     verdict = f"{len(failures)} check(s) FAILED" if failures else "all checks passed"
     out.say(verdict, "bad" if failures else "good")

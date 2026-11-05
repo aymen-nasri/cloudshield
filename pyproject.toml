@@ -12,6 +12,7 @@ authors = [{ name = "Aymen Nasri" }]
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
+    "prometheus-client>=0.21",
     "pydantic>=2.9",
     "pyyaml>=6.0",
     "uvicorn[standard]>=0.32",
