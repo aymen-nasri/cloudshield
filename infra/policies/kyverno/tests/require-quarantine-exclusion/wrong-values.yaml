@@ -1,0 +1,17 @@
+# Has the right key and operator, but excludes pods labelled "false": a quarantined pod still matches.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wrong-values-allow
+  namespace: shop
+spec:
+  podSelector:
+    matchLabels:
+      app: checkout
+    matchExpressions:
+      - key: cloudshield.io/quarantine
+        operator: NotIn
+        values: ["false"]
+  policyTypes: [Ingress]
+  ingress:
+    - {}
