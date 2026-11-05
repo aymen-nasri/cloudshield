@@ -51,8 +51,19 @@ lab = Lab()
 class FakeLambda(BaseHTTPRequestHandler):
     """The Lambda Invoke API: POST /2015-03-31/functions/{name}/invocations."""
 
+    def _body(self) -> bytes:
+        """The AWS SDK may send the body in chunks, with no Content-Length."""
+        if length := self.headers.get("Content-Length"):
+            return self.rfile.read(int(length))
+        body = b""
+        while size := int(self.rfile.readline().strip() or b"0", 16):
+            body += self.rfile.read(size)
+            self.rfile.readline()
+        self.rfile.readline()
+        return body
+
     def do_POST(self) -> None:  # noqa: N802
-        event = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        event = json.loads(self._body())
         function_error = None
         if "approval-notifier" in self.path:
             lab.tokens[event["proposal_id"]] = event["task_token"]
