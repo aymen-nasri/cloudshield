@@ -30,9 +30,9 @@ class SqsConsumer:
         self.pipeline = pipeline
         self.adapter = adapter
 
-    def poll_once(self, max_messages: int = 10) -> int:
+    def poll_once(self, max_messages: int = 10, wait_seconds: int = 20) -> int:
         response = self.client.receive_message(
-            QueueUrl=self.queue_url, MaxNumberOfMessages=max_messages, WaitTimeSeconds=20
+            QueueUrl=self.queue_url, MaxNumberOfMessages=max_messages, WaitTimeSeconds=wait_seconds
         )
         handled = 0
         for message in response.get("Messages", []):

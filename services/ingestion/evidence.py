@@ -63,6 +63,7 @@ class S3EvidenceStore:
             Key=key,
             Body=raw,
             ContentType="application/json",
+            ChecksumAlgorithm="SHA256",  # S3 requires this on a bucket with Object Lock
             ChecksumSHA256=base64.b64encode(digest.digest()).decode(),
             ServerSideEncryption="aws:kms",
             SSEKMSKeyId=self.kms_key_id,
