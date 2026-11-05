@@ -18,6 +18,14 @@ enrichment: k8s
 
 serviceAccountName: cloudshield-investigator
 
+# The AWS side, for a cluster that has it. Empty: evidence stays local and no findings worker runs.
+# Only tested against an emulator so far, never on real AWS.
+aws:
+  region: ""
+  evidenceBucket: "" # set together with evidenceKmsKeyId
+  evidenceKmsKeyId: ""
+  findingsQueueUrl: ""
+
 # Runs the responder as its own pod and has the API call it. Disabled: the API can't act at all.
 responder:
   enabled: false

@@ -7,6 +7,7 @@ doesn't enforce IAM. Moto has no EKS Pod Identity, so that lookup isn't tested h
 
 import json
 import os
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -14,7 +15,11 @@ import pytest
 
 boto3 = pytest.importorskip("boto3")
 
+from fastapi.testclient import TestClient  # noqa: E402
+
 from cases.store import InMemoryCaseStore  # noqa: E402
+from core.app import Settings, create_app  # noqa: E402
+from core.auth import AnalystDirectory, Principal  # noqa: E402
 from correlation.engine import CorrelationEngine  # noqa: E402
 from enrichment.context import instance_for_node  # noqa: E402
 from ingestion.adapters import GuardDutyAdapter  # noqa: E402
@@ -70,6 +75,15 @@ def _publish(detail: dict, *, source: str = "aws.guardduty", detail_type: str = 
 
 def _finding() -> dict:
     return json.loads(FIXTURE.read_text(encoding="utf-8"))["detail"]
+
+
+def _wait_for(check, seconds: float = 15):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if result := check():
+            return result
+        time.sleep(0.2)
+    raise AssertionError("it never happened")
 
 
 def test_tofu_wired_the_rule_to_the_queue():
@@ -187,3 +201,43 @@ def test_a_node_name_resolves_to_its_instance():
     [instance] = ec2.run_instances(ImageId=image, MinCount=1, MaxCount=1)["Instances"]
     assert instance_for_node(ec2, instance["PrivateDnsName"]) == instance["InstanceId"]
     assert instance_for_node(ec2, "no-such-node.internal") is None
+
+
+def test_the_running_app_reads_the_queue_and_keeps_evidence_in_the_bucket(sqs, evidence_bucket, monkeypatch):
+    """The whole path in the app itself, configured as a deployment would be.
+
+    Last in this file, because its bad message stays on the queue until its visibility timeout ends.
+    """
+    monkeypatch.setenv("AWS_ENDPOINT_URL", ENDPOINT)
+    settings = Settings(
+        region="eu-west-1",
+        evidence_bucket=evidence_bucket,
+        evidence_kms_key_id=_client("kms").list_keys()["Keys"][0]["KeyId"],
+        findings_queue_url=_url(sqs),
+        findings_wait_seconds=1,
+        analysts=AnalystDirectory.from_tokens({"reader": Principal("analyst:r", frozenset({"viewer"}))}),
+    )
+    reader = {"authorization": "Bearer reader"}
+    sqs.send_message(QueueUrl=_url(sqs), MessageBody="not json")  # a bad message must not stop the worker
+    _publish(_finding())
+
+    with TestClient(create_app(settings)) as client:
+        [summary] = _wait_for(lambda: client.get("/v1/cases", headers=reader).json())
+        case = client.get(f"/v1/cases/{summary['case_id']}", headers=reader).json()
+        coverage = client.get("/v1/health/coverage", headers=reader).json()
+
+        def metrics_once_counted() -> str | None:
+            # The worker counts a message just after handling it, so this can be a moment behind the case.
+            text = client.get("/metrics", headers=reader).text
+            return text if 'result="accepted",source="guardduty"' in text else None
+
+        metrics = _wait_for(metrics_once_counted)
+
+    [event] = case["events"]
+    assert event["source"] == "guardduty"
+    uri = event["raw_evidence_uri"]
+    assert uri.startswith(f"s3://{evidence_bucket}/")
+    stored = _client("s3").get_object(Bucket=evidence_bucket, Key=uri.split("/", 3)[3])
+    assert json.loads(stored["Body"].read())["detail"]["id"] == _finding()["id"]
+    assert coverage["sources"]["guardduty"]["state"] == "ok"
+    assert 'result="invalid",source="guardduty"' in metrics

@@ -26,6 +26,18 @@ spec:
             - { name: CLOUDSHIELD_CLUSTER, value: {{ .Values.cluster | quote }} }
             - { name: CLOUDSHIELD_ACCOUNT_ID, value: {{ .Values.accountId | quote }} }
             - { name: CLOUDSHIELD_ENRICHMENT, value: {{ .Values.enrichment | quote }} }
+            {{- with .Values.aws.evidenceBucket }}
+            - { name: CLOUDSHIELD_EVIDENCE_BUCKET, value: {{ . | quote }} }
+            {{- end }}
+            {{- with .Values.aws.evidenceKmsKeyId }}
+            - { name: CLOUDSHIELD_EVIDENCE_KMS_KEY_ID, value: {{ . | quote }} }
+            {{- end }}
+            {{- with .Values.aws.findingsQueueUrl }}
+            - { name: CLOUDSHIELD_FINDINGS_QUEUE_URL, value: {{ . | quote }} }
+            {{- end }}
+            {{- with .Values.aws.region }}
+            - { name: AWS_REGION, value: {{ . | quote }} }
+            {{- end }}
             {{- if .Values.responder.enabled }}
             - { name: CLOUDSHIELD_EXECUTOR, value: remote }
             - { name: CLOUDSHIELD_RESPONDER_URL, value: "http://cloudshield-responder" }
