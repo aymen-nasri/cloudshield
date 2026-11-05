@@ -236,26 +236,76 @@ def metric_values(api: httpx.Client) -> dict[tuple[str, tuple[tuple[str, str], .
 
 
 @contextmanager
-def deployed_api(port: int = LOCAL_PORT) -> Iterator[httpx.Client]:
-    """The API as it runs in the cluster, through a port-forward to its Service."""
+def forwarded(
+    namespace: str, service: str, local: int, remote: int, health: str, headers: dict[str, str] | None = None
+) -> Iterator[httpx.Client]:
+    """An HTTP client for a Service in the cluster, through a port-forward."""
     forward = subprocess.Popen(  # noqa: S603
-        ["kubectl", "-n", IMAGE_NS, "port-forward", f"svc/{SERVICE}", f"{port}:80"],  # noqa: S607
+        ["kubectl", "-n", namespace, "port-forward", f"svc/{service}", f"{local}:{remote}"],  # noqa: S607
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    reader = {"authorization": "Bearer alice-lab"}  # calls below that act as someone else say so
-    api = httpx.Client(base_url=f"http://127.0.0.1:{port}", headers=reader, timeout=30)
+    http = httpx.Client(base_url=f"http://127.0.0.1:{local}", headers=headers, timeout=30)
     try:
         for _ in range(30):
             try:
-                api.get("/healthz").raise_for_status()
+                http.get(health).raise_for_status()
                 break
             except httpx.HTTPError:
                 time.sleep(1)
-        yield api
+        yield http
     finally:
-        api.close()
+        http.close()
         forward.terminate()
+
+
+def deployed_api(port: int = LOCAL_PORT) -> Any:
+    """The API as it runs in the cluster. Calls that act as someone other than alice say so."""
+    return forwarded(IMAGE_NS, SERVICE, port, 80, "/healthz", {"authorization": "Bearer alice-lab"})
+
+
+def promql(http: httpx.Client, query: str, path: str = "/api/v1/query") -> float | None:
+    """The first value of an instant query, or None if it has no result yet."""
+    response = http.get(path, params={"query": query})
+    if response.status_code != 200:
+        return None
+    results = response.json()["data"]["result"]
+    return float(results[0]["value"][1]) if results else None
+
+
+def monitoring_checks(verified: float) -> list[tuple[str, str, bool]]:
+    """Prometheus really scraped CloudShield with its login, and Grafana reads the same numbers."""
+    wanted = 'sum(cloudshield_response_executions_total{outcome="verified"})'
+    probes = 'sum(cloudshield_verification_checks_total{check="traffic_probe",result="passed"})'
+    grafana_proxy = "/api/datasources/proxy/uid/prometheus/api/v1/query"
+    with (
+        forwarded("monitoring", "prometheus", 19090, 9090, "/-/ready") as prometheus,
+        forwarded("monitoring", "grafana", 13000, 3000, "/api/health") as grafana,
+    ):
+        seen = None
+        for _ in range(24):  # scrapes happen every 5 seconds
+            seen = promql(prometheus, wanted)
+            if seen == verified:
+                break
+            time.sleep(5)
+        up = promql(prometheus, 'up{job="cloudshield"}')
+        rules = prometheus.get("/api/v1/rules").json()["data"]["groups"]
+        names = {rule["name"] for group in rules for rule in group["rules"]}
+        boards = grafana.get("/api/search", params={"query": "CloudShield"}).json()
+        through_grafana = promql(grafana, wanted, grafana_proxy)
+        probes_through_grafana = promql(grafana, probes, grafana_proxy)
+    return [
+        ("Prometheus scrapes /metrics with its login", f"up = {up}", up == 1),
+        ("Prometheus has the run's verified actions", f"{seen}", seen == verified),
+        (
+            "alert rules loaded, skipped checks included",
+            f"{len(names)} rules",
+            "VerificationSkipped" in names,
+        ),
+        ("Grafana has the provisioned dashboard", f"{len(boards)} found", len(boards) == 1),
+        ("Grafana reads the same numbers", f"{through_grafana}", through_grafana == verified),
+        ("Grafana sees the traffic probes", f"{probes_through_grafana}", probes_through_grafana == verified),
+    ]
 
 
 def core_pod(admin: Any) -> Any:
@@ -476,6 +526,9 @@ def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, lis
     note(
         f"{accepted:.0f} alerts accepted, {verified:.0f} actions verified, {probes:.0f} traffic probes passed"
     )
+
+    for label, result, ok in monitoring_checks(verified):
+        row("", "monitor", label, result, ok)
 
     # Last, because it resets the in-process counters that the metrics check reads.
     count = restart_process(admin)
