@@ -2,6 +2,11 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+- **An event nobody resent stayed out of any case.** If a failure fell between storing an event and linking it, and the producer never tried again, nothing would ever link it. The next startup now finds those events and links them.
+
 ## [0.7.0] - 2026-11-05
 
 Fixes nine problems found by asking what happens when each step fails, and connects the app to its AWS paths. Nothing here has run on real AWS, EKS or Bedrock.

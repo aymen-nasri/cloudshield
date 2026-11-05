@@ -99,6 +99,36 @@ def test_a_redelivery_never_links_an_event_twice(stores, falco):
     assert len(case.links) == 1
 
 
+def test_the_next_startup_links_an_event_nobody_resent(stores):
+    """The producer got a 500 and never tried again. Nothing else would ever have linked this event."""
+    real_save = stores.cases.save
+    stores.cases.save = FailsOnce(real_save)
+    client = _app_client(stores)
+    body = fixture_bytes(S1, "falco_alert.json")
+    assert client.post("/v1/ingest/falco", content=body, headers=FALCO).status_code == 500
+    [waiting] = stores.events.unlinked(stores.cases)
+    assert stores.cases.list() == []
+
+    _app_client(stores)  # the process restarts
+
+    [case] = stores.cases.list()
+    assert [e.event_id for e in case.events] == [waiting.event_id]
+    assert stores.events.unlinked(stores.cases) == []
+    assert len([r for r in stores.audit.records() if r.action == "case.event_linked"]) == 1
+
+
+def test_a_restart_changes_nothing_when_everything_is_linked(stores):
+    client = _app_client(stores)
+    client.post("/v1/ingest/falco", content=fixture_bytes(S1, "falco_alert.json"), headers=FALCO)
+    audit_before = len(stores.audit.records())
+
+    _app_client(stores)
+
+    [case] = stores.cases.list()
+    assert len(case.events) == 1
+    assert len(stores.audit.records()) == audit_before
+
+
 def test_a_retry_writes_the_audit_record_a_failed_attempt_missed():
     """The case link is saved, then the audit write fails. The retry has to finish the job, once."""
     stores = build_stores(Settings())
