@@ -68,6 +68,7 @@ tofu -chdir="$lab" apply -input=false -auto-approve -no-color \
 # AWS's own local Step Functions, running our real state machine file. The tests serve its Lambda calls.
 docker run -d --name stepfunctions-local --network host \
   -e LAMBDA_ENDPOINT=http://127.0.0.1:5050 -e AWS_DEFAULT_REGION=us-east-1 \
+  -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test -e AWS_ACCOUNT_ID=123456789012 \
   amazon/aws-stepfunctions-local:2.0.0 >/dev/null
 for _ in $(seq 1 30); do
   curl -s -o /dev/null http://127.0.0.1:8083 && break
