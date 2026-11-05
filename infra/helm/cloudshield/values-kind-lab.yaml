@@ -10,6 +10,7 @@ cluster: kind-cloudshield-lab
 responder:
   enabled: true
   apiTokenSecret: cloudshield-responder-api
+  approverKeysSecret: cloudshield-approver-keys
 
 trafficProbe:
   pod: shop/probe

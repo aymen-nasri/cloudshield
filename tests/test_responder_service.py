@@ -3,23 +3,29 @@
 from datetime import UTC, datetime
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 
 from common.models import ResponseProposal, Target
 from core.app import Settings, create_app
 from core.auth import AnalystDirectory, Principal
 from ingestion.auth import SourceCredential
+from policy.signing import ApproverKey, sign_approval
 from responder.executor import KubernetesExecutor
 from responder.quarantine import QUARANTINE_LABEL
 from responder.remote import RemoteExecutor, ResponderError
 from responder.server import build_app
 from tests.conftest import fixture_bytes
 from tests.fakes import FakePodApi
+from tests.test_signed_approvals import sign_tool
 
 POD, POD_UID = "checkout-7d9f6c-x2k8p", "8b0e3c52-1d7a-4f43-9e6b-3a2c5d9f0e17"
 TARGET = Target(kind="Pod", name=POD, uid=POD_UID, namespace="shop")
 TOKEN = "responder-test-token"  # noqa: S105
 AUTH = {"authorization": f"Bearer {TOKEN}"}
+BOB = "analyst:bob"
+BOB_KEY = Ed25519PrivateKey.generate()
+KEYS = {BOB: ApproverKey(BOB_KEY.public_key(), frozenset({"incident-responder"}))}
 
 
 def _proposal(**changes) -> ResponseProposal:
@@ -38,10 +44,26 @@ def pods() -> FakePodApi:
 
 @pytest.fixture
 def server(pods) -> TestClient:
-    return TestClient(build_app(KubernetesExecutor(pods), TOKEN))
+    return TestClient(build_app(KubernetesExecutor(pods), TOKEN, approver_keys=KEYS))
+
+
+def _signed(proposal, approver=BOB, key=None, signed_at=None) -> dict:
+    when = signed_at or datetime.now(UTC)
+    return {
+        "approver": approver,
+        "signed_at": when.isoformat(),
+        "signature": sign_approval(key or BOB_KEY, proposal, approver, when),
+    }
+
+
+def _execute(server, proposal, approvals, headers=AUTH):
+    body = {"proposal": proposal.model_dump(mode="json"), "approvals": approvals}
+    return server.post("/v1/responder/execute", json=body, headers=headers)
 
 
 def _post(server, path, proposal, headers=AUTH):
+    if path == "execute":
+        return _execute(server, proposal, [_signed(proposal)], headers)
     return server.post(f"/v1/responder/{path}", json=proposal.model_dump(mode="json"), headers=headers)
 
 
@@ -54,7 +76,12 @@ def test_every_route_needs_the_token(server, pods, path, headers):
 
 def test_it_refuses_to_start_without_a_token(pods):
     with pytest.raises(ValueError, match="token"):
-        build_app(KubernetesExecutor(pods), "")
+        build_app(KubernetesExecutor(pods), "", approver_keys=KEYS)
+
+
+def test_it_refuses_to_start_without_approver_keys(pods):
+    with pytest.raises(ValueError, match="approver keys"):
+        build_app(KubernetesExecutor(pods), TOKEN, approver_keys={})
 
 
 @pytest.mark.parametrize(
@@ -88,7 +115,7 @@ def test_an_allowed_action_runs(server, pods):
 
 
 def _api(pods) -> tuple[TestClient, RemoteExecutor]:
-    remote = RemoteExecutor(TestClient(build_app(KubernetesExecutor(pods), TOKEN)), TOKEN)
+    remote = RemoteExecutor(TestClient(build_app(KubernetesExecutor(pods), TOKEN, approver_keys=KEYS)), TOKEN)
     settings = Settings(
         cluster="cs-lab-eks",
         credentials={"falco": SourceCredential(token="falco-test")},
@@ -117,7 +144,12 @@ def test_the_whole_workflow_runs_across_the_two_services(pods):
     assert checked["impact_preview"]["pod_keeps_running"] is True
 
     decision = {"proposal_hash": checked["proposal_hash"], "justification": "confirmed"}
-    api.post(f"/v1/proposals/{pid}/approve", json=decision, headers=bob)
+    # Without a signature the API refuses at once, rather than failing at execution.
+    assert api.post(f"/v1/proposals/{pid}/approve", json=decision, headers=bob).status_code == 422
+
+    signature = sign_tool.approve(checked, BOB_KEY, BOB)
+    decision |= {"signature": signature["signature"], "signed_at": signature["signed_at"]}
+    assert api.post(f"/v1/proposals/{pid}/approve", json=decision, headers=bob).status_code == 200
     done = api.post(f"/v1/proposals/{pid}/execute", headers=bob).json()
 
     assert done["state"] == "verified"
@@ -126,7 +158,8 @@ def test_the_whole_workflow_runs_across_the_two_services(pods):
 
 
 def test_a_refusal_reaches_the_caller_as_an_error(pods):
-    remote = RemoteExecutor(TestClient(build_app(KubernetesExecutor(pods), TOKEN)), "wrong-token")
+    server = build_app(KubernetesExecutor(pods), TOKEN, approver_keys=KEYS)
+    remote = RemoteExecutor(TestClient(server), "wrong-token")
     with pytest.raises(ResponderError, match="401"):
         remote.execute(_proposal())
     assert QUARANTINE_LABEL not in pods.labels
