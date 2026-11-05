@@ -225,7 +225,14 @@ def test_the_running_app_reads_the_queue_and_keeps_evidence_in_the_bucket(sqs, e
         [summary] = _wait_for(lambda: client.get("/v1/cases", headers=reader).json())
         case = client.get(f"/v1/cases/{summary['case_id']}", headers=reader).json()
         coverage = client.get("/v1/health/coverage", headers=reader).json()
-        metrics = client.get("/metrics", headers=reader).text
+        # The worker counts a message just after handling it, so this can be a moment behind the case.
+        metrics = _wait_for(
+            lambda: (
+                (text := client.get("/metrics", headers=reader).text)
+                if 'result="accepted",source="guardduty"' in text
+                else None
+            )
+        )
 
     [event] = case["events"]
     assert event["source"] == "guardduty"
@@ -234,5 +241,4 @@ def test_the_running_app_reads_the_queue_and_keeps_evidence_in_the_bucket(sqs, e
     stored = _client("s3").get_object(Bucket=evidence_bucket, Key=uri.split("/", 3)[3])
     assert json.loads(stored["Body"].read())["detail"]["id"] == _finding()["id"]
     assert coverage["sources"]["guardduty"]["state"] == "ok"
-    assert 'source="guardduty",result="accepted"' in metrics
-    assert 'source="guardduty",result="invalid"' in metrics
+    assert 'result="invalid",source="guardduty"' in metrics
