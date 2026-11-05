@@ -51,9 +51,9 @@
 <text x="18" y="922" fill="#8b949e" xml:space="preserve">            kyverno: no signatures found</text>
 <text x="18" y="941" fill="#3fb950" xml:space="preserve">   image    signed, but by someone else                       -&gt; rejected</text>
 <text x="18" y="960" fill="#8b949e" xml:space="preserve">            ghcr.io/sigstore/cosign/cosign:v2.4.1</text>
-<text x="18" y="979" fill="#8b949e" xml:space="preserve">            kyverno: subject mismatch: expected https://github.com/aymen-</text>
-<text x="18" y="998" fill="#8b949e" xml:space="preserve">            nasri/cloudshield/.github/workflows/ci.yml@refs/heads/main, received</text>
-<text x="18" y="1017" fill="#8b949e" xml:space="preserve">            keyless@projectsigstore.iam.gserviceaccount.com</text>
+<text x="18" y="979" fill="#8b949e" xml:space="preserve">            kyverno: subject mismatch: expected</text>
+<text x="18" y="998" fill="#8b949e" xml:space="preserve">            https://github.com/aymen-nasri/cloudshield/.github/workflows/ci.yml@refs/heads/main,</text>
+<text x="18" y="1017" fill="#8b949e" xml:space="preserve">            received keyless@projectsigstore.iam.gserviceaccount.com</text>
 <text x="18" y="1036" fill="#3fb950" xml:space="preserve">14 audit    25 hash-chained records                           -&gt; chain intact</text>
 <text x="18" y="1055" fill="#3fb950" xml:space="preserve">15 metrics  /metrics agrees with what just happened           -&gt; agrees</text>
 <text x="18" y="1074" fill="#8b949e" xml:space="preserve">            49 alerts accepted, 2 actions verified, 2 traffic probes passed</text>

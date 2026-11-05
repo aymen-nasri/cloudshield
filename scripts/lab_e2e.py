@@ -409,7 +409,7 @@ def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, lis
             row("13" if image == SIGNED_IMAGE else "", "image", label, want if ok else f"NOT {want}", ok)
             note(image)
             if reason:
-                for line in textwrap.wrap(f"kyverno: {rejection_reason(reason)}", 84):
+                for line in textwrap.wrap(f"kyverno: {rejection_reason(reason)}", 84, break_on_hyphens=False):
                     note(line)
 
     audit = api.get("/v1/audit", params={"case_id": case["case_id"]}).json()
