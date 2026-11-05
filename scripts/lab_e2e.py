@@ -145,6 +145,28 @@ def case_for(api: httpx.Client, pod_id: str, event_type: str, *, timeout: float)
         time.sleep(2)
 
 
+def uid_precondition_check(core: Any, pod: str) -> bool:
+    """The real API server must refuse the responder's patch if the UID is wrong, and accept it if right.
+
+    Fakes can't show this. An earlier version put metadata.uid in a merge patch, and this check caught
+    the API server accepting a wrong one.
+    """
+
+    def patch(uid: str) -> int | None:
+        body = [
+            {"op": "test", "path": "/metadata/uid", "value": uid},
+            {"op": "add", "path": "/metadata/labels/cloudshield.io~1uid-check", "value": "x"},
+        ]
+        try:
+            core.patch_namespaced_pod(pod, NS, body, dry_run="All")
+        except ApiException as exc:
+            return exc.status
+        return None
+
+    real_uid = core.read_namespaced_pod(pod, NS).metadata.uid
+    return patch("not-this-pod") in (409, 422) and patch(real_uid) is None
+
+
 def admission_check(net: Any) -> tuple[bool, bool]:
     """Ask the API server to admit two allow-policies (dry run): Kyverno must reject the leaky one.
 
@@ -157,15 +179,23 @@ def admission_check(net: Any) -> tuple[bool, bool]:
     guarded["spec"]["podSelector"]["matchExpressions"] = [
         {"key": "cloudshield.io/quarantine", "operator": "NotIn", "values": ["true"]}
     ]
+    renamed = copy.deepcopy(leaky)
+    renamed["metadata"]["name"] = "default-deny-all"  # the name must not excuse an allow-policy
+
+    def refused(policy: dict[str, Any]) -> bool:
+        try:
+            net.create_namespaced_network_policy(NS, policy, dry_run="All")
+        except ApiException as exc:
+            return exc.status in (400, 403) and "require-quarantine-exclusion" in (exc.body or "")
+        return False
+
     rejected = False
     for _ in range(10):
-        try:
-            net.create_namespaced_network_policy(NS, leaky, dry_run="All")
-        except ApiException as exc:
-            rejected = exc.status in (400, 403) and "require-quarantine-exclusion" in (exc.body or "")
+        rejected = refused(leaky)
         if rejected:
             break
         time.sleep(3)
+    rejected = rejected and refused(renamed)
     try:
         net.create_namespaced_network_policy(NS, guarded, dry_run="All")
         admitted = True
@@ -511,6 +541,14 @@ def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, lis
         f"{sum(checks.values())}/{len(checks)} refused", all(checks.values()))  # fmt: skip
     for name, refused in checks.items():
         note(f"{name:<34} {'denied' if refused else 'ALLOWED'}")
+    uid_refused = uid_precondition_check(admin, target.metadata.name)
+    row(
+        "",
+        "patch",
+        "a label patch naming another pod's UID",
+        "refused" if uid_refused else "NOT REFUSED",
+        uid_refused,
+    )
 
     if admission:
         leaky, guarded = admission_check(client.NetworkingV1Api())

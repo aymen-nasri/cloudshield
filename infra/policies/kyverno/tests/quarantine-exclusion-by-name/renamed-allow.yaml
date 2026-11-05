@@ -1,0 +1,13 @@
+# Named like the real default-deny, but it allows traffic. The name must not excuse it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: shop
+spec:
+  podSelector:
+    matchLabels:
+      app: checkout
+  policyTypes: [Ingress]
+  ingress:
+    - {}
