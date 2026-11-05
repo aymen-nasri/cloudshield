@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 
 from core.auth import AnalystDirectory, require_analyst
+from core.metrics import Metrics
 from ingestion.adapters import MAX_PAYLOAD_BYTES, PayloadError, SourceAdapter
 from ingestion.auth import SourceCredential, authenticate
 from ingestion.coverage import CoverageTracker
@@ -16,6 +17,7 @@ def build_router(
     credentials: dict[str, SourceCredential],
     coverage: CoverageTracker,
     analysts: AnalystDirectory,
+    metrics: Metrics,
 ) -> APIRouter:
     router = APIRouter(prefix="/v1", tags=["ingestion"])
 
@@ -27,16 +29,20 @@ def build_router(
 
         body = await request.body()
         if len(body) > MAX_PAYLOAD_BYTES:
+            metrics.ingest_events.labels(source, "too_large").inc()
             raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "payload too large")
         if not authenticate(credentials.get(source), request.headers, body):
+            metrics.ingest_events.labels(source, "unauthenticated").inc()
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "producer not authenticated")
 
         try:
             # Storage and enrichment calls block; keep them off the event loop.
             result = await run_in_threadpool(pipeline.ingest, body, adapter)
         except PayloadError as exc:
+            metrics.ingest_events.labels(source, "invalid").inc()
             raise HTTPException(422, str(exc)) from exc
 
+        metrics.ingest_events.labels(source, result.status).inc()
         coverage.heartbeat(source)
         return {"status": result.status, "event_id": result.event_id, "dedup_key": result.dedup_key}
 
