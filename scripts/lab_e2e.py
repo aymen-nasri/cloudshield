@@ -179,15 +179,23 @@ def admission_check(net: Any) -> tuple[bool, bool]:
     guarded["spec"]["podSelector"]["matchExpressions"] = [
         {"key": "cloudshield.io/quarantine", "operator": "NotIn", "values": ["true"]}
     ]
+    renamed = copy.deepcopy(leaky)
+    renamed["metadata"]["name"] = "default-deny-all"  # the name must not excuse an allow-policy
+
+    def refused(policy: dict[str, Any]) -> bool:
+        try:
+            net.create_namespaced_network_policy(NS, policy, dry_run="All")
+        except ApiException as exc:
+            return exc.status in (400, 403) and "require-quarantine-exclusion" in (exc.body or "")
+        return False
+
     rejected = False
     for _ in range(10):
-        try:
-            net.create_namespaced_network_policy(NS, leaky, dry_run="All")
-        except ApiException as exc:
-            rejected = exc.status in (400, 403) and "require-quarantine-exclusion" in (exc.body or "")
+        rejected = refused(leaky)
         if rejected:
             break
         time.sleep(3)
+    rejected = rejected and refused(renamed)
     try:
         net.create_namespaced_network_policy(NS, guarded, dry_run="All")
         admitted = True

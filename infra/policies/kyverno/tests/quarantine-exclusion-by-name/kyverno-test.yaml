@@ -1,0 +1,16 @@
+# An allow-policy can't escape the guard by taking the default-deny's name.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: quarantine-exclusion-by-name
+policies:
+  - ../../require-quarantine-exclusion.yaml
+resources:
+  - renamed-allow.yaml
+variables: values.yaml
+results:
+  - policy: require-quarantine-exclusion
+    rule: allow-policies-exclude-quarantined-pods
+    kind: NetworkPolicy
+    resources: [default-deny-all]
+    result: fail
