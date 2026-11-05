@@ -434,7 +434,7 @@ def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, lis
         verified == 2
         and probes == 2
         and accepted >= case["event_count"]
-        and lag == accepted
+        and lag >= accepted  # lag is recorded first, and alerts keep arriving during the scrape
         and degraded == 0
     )
     row(
