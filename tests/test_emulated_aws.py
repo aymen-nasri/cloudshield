@@ -225,14 +225,13 @@ def test_the_running_app_reads_the_queue_and_keeps_evidence_in_the_bucket(sqs, e
         [summary] = _wait_for(lambda: client.get("/v1/cases", headers=reader).json())
         case = client.get(f"/v1/cases/{summary['case_id']}", headers=reader).json()
         coverage = client.get("/v1/health/coverage", headers=reader).json()
-        # The worker counts a message just after handling it, so this can be a moment behind the case.
-        metrics = _wait_for(
-            lambda: (
-                (text := client.get("/metrics", headers=reader).text)
-                if 'result="accepted",source="guardduty"' in text
-                else None
-            )
-        )
+
+        def metrics_once_counted() -> str | None:
+            # The worker counts a message just after handling it, so this can be a moment behind the case.
+            text = client.get("/metrics", headers=reader).text
+            return text if 'result="accepted",source="guardduty"' in text else None
+
+        metrics = _wait_for(metrics_once_counted)
 
     [event] = case["events"]
     assert event["source"] == "guardduty"
