@@ -10,6 +10,8 @@ class CaseStore(Protocol):
 
     def get(self, case_id: str) -> Case | None: ...
 
+    def case_for_event(self, event_id: str) -> Case | None: ...
+
     def list(self) -> list[Case]: ...
 
 
@@ -27,6 +29,9 @@ class InMemoryCaseStore:
 
     def get(self, case_id: str) -> Case | None:
         return self._cases.get(case_id)
+
+    def case_for_event(self, event_id: str) -> Case | None:
+        return next((c for c in self._cases.values() if any(e.event_id == event_id for e in c.events)), None)
 
     def list(self) -> list[Case]:
         return sorted(self._cases.values(), key=lambda c: c.opened_at, reverse=True)

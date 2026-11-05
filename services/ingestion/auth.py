@@ -23,13 +23,18 @@ def sign(secret: str, body: bytes) -> str:
     return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
 
+def _same(provided: str, expected: str) -> bool:
+    """Compared as bytes: on str, compare_digest raises for non-ASCII, and a caller controls this header."""
+    return hmac.compare_digest(provided.encode(), expected.encode())
+
+
 def authenticate(credential: SourceCredential | None, headers: Mapping[str, str], body: bytes) -> bool:
     if credential is None:
         return False
     if credential.hmac_secret:
         provided = headers.get(SIGNATURE_HEADER, "")
-        return hmac.compare_digest(provided, sign(credential.hmac_secret, body))
+        return _same(provided, sign(credential.hmac_secret, body))
     if credential.token:
         provided = headers.get("authorization", "")
-        return hmac.compare_digest(provided, f"Bearer {credential.token}")
+        return _same(provided, f"Bearer {credential.token}")
     return False

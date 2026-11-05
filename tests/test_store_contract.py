@@ -31,7 +31,17 @@ def test_event_round_trips_exactly(stores, falco):
     assert ids.pod_uid == "8b0e3c52-1d7a-4f43-9e6b-3a2c5d9f0e17"
     assert stored.event_time == datetime(2026, 10, 28, 14, 2, 40, 512345, tzinfo=UTC)
     assert stored.ocsf["attacks"][0]["technique"]["uid"] == "T1059"
-    assert stores.events.exists(result.dedup_key)
+    assert stores.events.find(result.dedup_key) == stored
+    assert stores.events.find("no such key") is None
+
+
+def test_a_case_can_be_found_from_one_of_its_events(stores, falco):
+    result = _pipeline(stores).ingest(fixture_bytes(S1, "falco_alert.json"), falco)
+    found = stores.cases.case_for_event(result.event_id)
+
+    assert found is not None
+    assert [e.event_id for e in found.events] == [result.event_id]
+    assert stores.cases.case_for_event("evt_none") is None
 
 
 def test_store_rejects_a_second_insert_of_the_same_dedup_key(stores, falco):
