@@ -93,3 +93,31 @@ def test_wazuh_alert_uses_agent_instance_label():
 def test_malformed_payloads_are_rejected(falco, raw):
     with pytest.raises(PayloadError):
         falco.parse(raw)
+
+
+def _finding(guardduty, **envelope_changes):
+    body = json.loads(fixture_bytes("s1_suspicious_process", "guardduty_finding.json"))
+    body.update(envelope_changes)
+    return guardduty, body
+
+
+def test_guardduty_prefers_the_findings_own_account(guardduty):
+    _, body = _finding(guardduty, account="999999999999")  # a delegated administrator's account
+    payload = guardduty.parse(json.dumps(body).encode())
+    event = guardduty.to_event(payload, event_id="e", ingest_time=NOW, raw_uri="u", checksum="c")
+    assert event.account_id == body["detail"]["accountId"]
+
+
+def test_guardduty_falls_back_to_the_envelope_account(guardduty):
+    _, body = _finding(guardduty, account="999999999999")
+    del body["detail"]["accountId"]
+    payload = guardduty.parse(json.dumps(body).encode())
+    event = guardduty.to_event(payload, event_id="e", ingest_time=NOW, raw_uri="u", checksum="c")
+    assert event.account_id == "999999999999"
+
+
+def test_guardduty_needs_an_account_from_somewhere(guardduty):
+    _, body = _finding(guardduty)
+    del body["account"], body["detail"]["accountId"]
+    with pytest.raises(PayloadError, match="no account"):
+        guardduty.parse(json.dumps(body).encode())

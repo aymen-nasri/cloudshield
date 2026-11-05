@@ -48,16 +48,24 @@ def principal_arn(account: str, access_key: dict[str, Any]) -> str | None:
     return None
 
 
+def _account(payload: dict[str, Any]) -> str:
+    """The finding's own account. The event envelope's account is only a fallback: with a delegated
+    GuardDuty administrator, the two can differ."""
+    return str(payload["detail"].get("accountId") or payload.get("account") or "")
+
+
 class GuardDutyAdapter:
     name = "guardduty"
 
     def parse(self, raw: bytes) -> dict[str, Any]:
-        payload = load_json_object(raw, ("detail-type", "account", "detail"))
+        payload = load_json_object(raw, ("detail-type", "detail"))
         if payload["detail-type"] != "GuardDuty Finding":
             raise PayloadError(f"unexpected detail-type {payload['detail-type']!r}")
         for key in ("id", "type", "severity", "updatedAt"):
             if key not in payload["detail"]:
                 raise PayloadError(f"detail.{key} missing")
+        if not _account(payload):
+            raise PayloadError("no account: neither detail.accountId nor account is present")
         return payload
 
     def source_event_id(self, payload: dict[str, Any]) -> str:
@@ -82,7 +90,7 @@ class GuardDutyAdapter:
         instance_id = _dig(resource, "instanceDetails", "instanceId")
         access_key = resource.get("accessKeyDetails") or {}
         principal = access_key.get("principalId")
-        arn = principal_arn(payload["account"], access_key)
+        arn = principal_arn(_account(payload), access_key)
         api_call = _dig(detail, "service", "action", "awsApiCallAction") or {}
         event_time = parse_time(_dig(detail, "service", "eventLastSeen") or detail["updatedAt"])
         severity = _severity(float(detail["severity"]))
@@ -102,7 +110,7 @@ class GuardDutyAdapter:
             source_event_id=self.source_event_id(payload),
             event_time=event_time,
             ingest_time=ingest_time,
-            account_id=payload["account"],
+            account_id=_account(payload),
             cluster=_dig(resource, "eksClusterDetails", "name"),
             namespace=namespace,
             resource_id=resource_id,
@@ -127,7 +135,7 @@ class GuardDutyAdapter:
                 },
                 "cloud": {
                     "provider": "AWS",
-                    "account": {"uid": payload["account"]},
+                    "account": {"uid": _account(payload)},
                     "region": payload.get("region"),
                 },
                 "metadata": {
