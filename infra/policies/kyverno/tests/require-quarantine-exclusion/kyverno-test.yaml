@@ -23,3 +23,8 @@ results:
     kind: NetworkPolicy
     resources: [leaky-allow, wrong-values-allow]
     result: fail
+  - policy: require-quarantine-exclusion
+    rule: allow-policies-exclude-quarantined-pods
+    kind: NetworkPolicy
+    resources: [default-deny-all]
+    result: skip

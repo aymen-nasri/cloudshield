@@ -22,10 +22,16 @@ spec:
               namespaceSelector:
                 matchLabels:
                   cloudshield.io/protected: "true"
-      exclude:
+      # Only a policy that allows something can leak. A real default-deny has no rules, so it's left out
+      # by what it does and not by its name, which anyone can copy.
+      preconditions:
         any:
-          - resources:
-              names: [default-deny-all]
+          - key: "{{ request.object.spec.ingress || `[]` | length(@) }}"
+            operator: GreaterThan
+            value: 0
+          - key: "{{ request.object.spec.egress || `[]` | length(@) }}"
+            operator: GreaterThan
+            value: 0
       validate:
         failureAction: Enforce
         message: >-
@@ -34,6 +40,6 @@ spec:
         deny:
           conditions:
             all:
-              - key: "{{ request.object.spec.podSelector.matchExpressions || `[]` | [?key=='cloudshield.io/quarantine' && operator=='NotIn'] | length(@) }}"
+              - key: "{{ request.object.spec.podSelector.matchExpressions || `[]` | [?key=='cloudshield.io/quarantine' && operator=='NotIn' && contains(values, 'true')] | length(@) }}"
                 operator: Equals
                 value: 0
