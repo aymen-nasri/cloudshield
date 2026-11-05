@@ -94,7 +94,7 @@ flowchart LR
 | **Kyverno** | Audit-then-enforce admission rules, image signature verification [[R13]](references.md#references) | ✅ quarantine guard and image verification enforced on kind |
 | **AWS Secrets Manager** | Keeps operational secrets out of images and repositories | 📐 |
 | **GitHub OIDC + AWS IAM** | Short-lived CI credentials instead of long-lived keys [[R16]](references.md#references) | 🧩 |
-| **Branch protection + approvals** | Controls who can deploy and who can change response code | 📐 |
+| **Branch protection + approvals** | Controls who can deploy and who can change response code | ✅ the checks are required on `main`, admins included, with no force pushes · no required reviews, because there's one maintainer and GitHub doesn't let you approve your own pull request |
 | **Dependency review + SBOM** | Known dependency composition for vulnerability investigations | ✅ SBOM, dependency review (fails on high), Dependabot |
 | **Infrastructure validation in CI** | `tofu fmt` + `tofu validate`, `helm lint`, kubeconform against Kubernetes and Kyverno schemas, `kyverno test` (the quarantine guard must catch a leaky allow-policy), Ansible syntax check, and static checks on the Step Functions definition. No cloud account needed | ✅ |
 
