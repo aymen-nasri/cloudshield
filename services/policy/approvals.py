@@ -36,6 +36,9 @@ class Approval:
     bound_hash: str
     decided_at: datetime
     justification: str
+    # Set where the responder checks approvals for itself. See policy/signing.py.
+    signature: str | None = None
+    signed_at: datetime | None = None
 
 
 class ApprovalError(Exception):

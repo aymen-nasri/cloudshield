@@ -34,6 +34,18 @@ kubectl -n cloudshield create secret generic cloudshield-ingest-credentials \
 kubectl -n cloudshield get secret cloudshield-responder-api >/dev/null 2>&1 ||
   kubectl -n cloudshield create secret generic cloudshield-responder-api --from-literal=token="$(openssl rand -hex 32)"
 
+# Approvers' public keys, for the responder only. The private key comes from a fixed lab seed that
+# scripts/lab_e2e.py uses too: a real approver generates theirs with scripts/sign_approval.py.
+approver_keys=$(docker run --rm cloudshield/core:lab python -c '
+import base64, hashlib, json
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+key = Ed25519PrivateKey.from_private_bytes(hashlib.sha256(b"bob-lab-approval").digest())
+raw = key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+print(json.dumps({"analyst:bob": {"public_key": base64.b64encode(raw).decode(), "roles": ["incident-responder"]}}))')
+kubectl -n cloudshield create secret generic cloudshield-approver-keys --from-literal=keys.json="$approver_keys" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
 # Kubernetes fills the prober's token Secret shortly after it is created.
 until [ -n "$(kubectl -n cloudshield get secret cloudshield-prober-token -o jsonpath='{.data.token}')" ]; do
   sleep 1

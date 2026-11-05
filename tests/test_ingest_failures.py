@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 
 from core.app import Settings, build_stores, create_app
@@ -12,6 +13,7 @@ from ingestion.adapters import PayloadError
 from ingestion.auth import SIGNATURE_HEADER, SourceCredential
 from ingestion.evidence import InMemoryEvidenceStore
 from ingestion.pipeline import IngestPipeline
+from policy.signing import ApproverKey
 from responder.executor import KubernetesExecutor
 from responder.server import build_app
 from tests.conftest import fixture_bytes
@@ -221,7 +223,11 @@ def test_a_non_ascii_analyst_token_is_a_401():
 
 def test_a_non_ascii_token_at_the_responder_is_a_401():
     server = TestClient(
-        build_app(KubernetesExecutor(FakePodApi(name="p", uid="u")), "responder-token"),
+        build_app(
+            KubernetesExecutor(FakePodApi(name="p", uid="u")),
+            "responder-token",
+            approver_keys={"x": ApproverKey(Ed25519PrivateKey.generate().public_key(), frozenset())},
+        ),
         raise_server_exceptions=False,
     )
     response = server.post("/v1/responder/labels", json={}, headers={"authorization": NON_ASCII})
