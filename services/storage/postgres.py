@@ -104,10 +104,10 @@ class PostgresEventStore:
     def __init__(self, db: Database) -> None:
         self.db = db
 
-    def exists(self, dedup_key: str) -> bool:
+    def find(self, dedup_key: str) -> NormalizedEvent | None:
         with self.db.pool.connection() as conn:
-            row = conn.execute("SELECT 1 AS hit FROM event WHERE dedup_key = %s", (dedup_key,)).fetchone()
-        return row is not None
+            row = conn.execute("SELECT * FROM event WHERE dedup_key = %s", (dedup_key,)).fetchone()
+        return _event_from_row(row) if row else None
 
     def insert(self, event: NormalizedEvent, dedup_key: str) -> None:
         try:
@@ -187,6 +187,10 @@ class PostgresCaseStore:
 
     def get(self, case_id: str) -> Case | None:
         found = self._load("id = %s", (case_id,))
+        return found[0] if found else None
+
+    def case_for_event(self, event_id: str) -> Case | None:
+        found = self._load("id IN (SELECT incident_id FROM incident_event WHERE event_id = %s)", (event_id,))
         return found[0] if found else None
 
     def list(self) -> list[Case]:

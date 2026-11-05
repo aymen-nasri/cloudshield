@@ -42,7 +42,8 @@ def build_app(
     engine = PolicyEngine(allowlist, is_fresh=executor.is_fresh)
 
     def caller(authorization: Annotated[str | None, Header()] = None) -> None:
-        if not authorization or not hmac.compare_digest(authorization, f"Bearer {token}"):
+        # Compared as bytes: on str, compare_digest raises for non-ASCII, and a caller controls this header.
+        if not authorization or not hmac.compare_digest(authorization.encode(), f"Bearer {token}".encode()):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "caller not authenticated")
 
     def allowed(proposal: ResponseProposal) -> ResponseProposal:
