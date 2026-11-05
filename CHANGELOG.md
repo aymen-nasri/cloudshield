@@ -2,7 +2,9 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.5.0] - 2026-11-05
+
+The API pod no longer holds any Kubernetes write access: a separate responder pod does the acting and re-checks the policy itself. The kind lab now also runs PostgreSQL, Prometheus and Grafana. It has not yet run on EKS, a real AWS account or Bedrock.
 
 ### Added
 - **The responder runs as its own pod.** The API pod runs as the read-only investigator and holds no Kubernetes write access. It calls the responder with a shared token, and the responder re-checks the policy itself, so a stolen token can only ask for allowlisted actions in allowlisted namespaces.
@@ -105,6 +107,7 @@ code and in CI. It has not yet run on a real cluster or AWS account (see the REA
   Trivy image scan and SBOM, and infrastructure validation (tofu validate, helm lint, kubeconform,
   kyverno test, Ansible syntax check).
 
+[0.5.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.5.0
 [0.4.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.4.0
 [0.3.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.3.0
 [0.2.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.2.0
