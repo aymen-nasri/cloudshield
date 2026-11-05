@@ -42,6 +42,7 @@ class Lab:
     def __init__(self) -> None:
         self.pods = FakePodApi(name=POD, uid=POD_UID)
         self.tokens: dict[str, str] = {}
+        self.refusals: list[str] = []
 
 
 lab = Lab()
@@ -61,6 +62,7 @@ class FakeLambda(BaseHTTPRequestHandler):
                 result = handler(event, api=lab.pods)
             except Exception as exc:  # what Lambda does when a handler raises
                 function_error = "Unhandled"
+                lab.refusals.append(type(exc).__name__)
                 result = {"errorType": type(exc).__name__, "errorMessage": str(exc)}
         body = json.dumps(result).encode()
         self.send_response(200)
@@ -103,6 +105,7 @@ def machine(sfn) -> str:
 @pytest.fixture(autouse=True)
 def fresh_pod():
     lab.pods = FakePodApi(name=POD, uid=POD_UID)
+    lab.refusals.clear()
 
 
 def _proposal(uid: str = POD_UID) -> ResponseProposal:
@@ -182,6 +185,9 @@ def test_a_tampered_proposal_never_reaches_approval(sfn, machine):
     execution = _start(sfn, machine, proposal, claimed_hash="sha256:not-this-proposal")
 
     assert _finish(sfn, execution)["status"] == "FAILED"
+    # The handler itself refused it: not a failure to reach Lambda, which would also end in FAILED.
+    assert "SdkClient" not in _failed_with(sfn, execution)
+    assert lab.refusals == ["ApprovalMismatch"]
     assert proposal.proposal_id not in lab.tokens
     assert QUARANTINE_LABEL not in lab.pods.labels
 
