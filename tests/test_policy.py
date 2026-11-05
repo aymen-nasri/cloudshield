@@ -1,6 +1,9 @@
 """The policy decision table from docs/response.md, plus approval binding (T-07)."""
 
+import re
 from datetime import UTC, datetime, timedelta
+from importlib import resources
+from pathlib import Path
 
 import pytest
 
@@ -26,6 +29,35 @@ def proposal(**overrides) -> ResponseProposal:
     }
     fields.update(overrides)
     return ResponseProposal(**fields)
+
+
+def _policy_file(tmp_path, *replacements) -> Path:
+    text = resources.files("policy").joinpath("policies/actions.yaml").read_text(encoding="utf-8")
+    for old, new in replacements:
+        assert old in text
+        text = text.replace(old, new)
+    path = tmp_path / "actions.yaml"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "complaint"),
+    [
+        # This typo used to remove the namespace restriction altogether.
+        ("allowed_namespaces", "allowed_namespacez", "unknown policy setting target.allowed_namespacez"),
+        ("denied_namespaces", "deny_namespaces", "unknown policy setting target.deny_namespaces"),
+        ("require_dry_run", "require_dryrun", "unknown policy setting require_dryrun"),
+        ("ttl_minutes", "ttl", "unknown policy setting approvals.ttl"),
+        ("allowed_namespaces: [shop]", "allowed_namespaces: []", "needs target.allowed_namespaces"),
+        ("environments: [lab]", "environments: []", "at least one environment"),
+        ("kinds: [Pod]", "kinds: []", "at least one kind"),
+        ("roles: [incident-responder]", "roles: []", "needs approvals.roles"),
+    ],
+)
+def test_a_mistake_in_the_policy_file_stops_startup(tmp_path, old, new, complaint):
+    with pytest.raises(ValueError, match=re.escape(complaint)):
+        load_policies(_policy_file(tmp_path, (old, new)))
 
 
 @pytest.fixture

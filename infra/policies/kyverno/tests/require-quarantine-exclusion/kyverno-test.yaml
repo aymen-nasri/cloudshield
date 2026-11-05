@@ -10,6 +10,7 @@ policies:
 resources:
   - ../../../networkpolicies/shop.yaml
   - leaky-allow.yaml
+  - wrong-values.yaml
 variables: values.yaml
 results:
   - policy: require-quarantine-exclusion
@@ -20,5 +21,10 @@ results:
   - policy: require-quarantine-exclusion
     rule: allow-policies-exclude-quarantined-pods
     kind: NetworkPolicy
-    resources: [leaky-allow]
+    resources: [leaky-allow, wrong-values-allow]
     result: fail
+  - policy: require-quarantine-exclusion
+    rule: allow-policies-exclude-quarantined-pods
+    kind: NetworkPolicy
+    resources: [default-deny-all]
+    result: skip

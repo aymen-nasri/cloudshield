@@ -91,6 +91,12 @@ class ProposalStore(Protocol):
 
     def add_approval(self, approval: Approval) -> None: ...
 
+    def renew_approval(self, approval: Approval) -> None:
+        """Replace this approver's expired decision. They still hold only one."""
+        ...
+
+    def in_state(self, state: ProposalState) -> list[ProposalRecord]: ...
+
     def start_execution(self, proposal_id: str, execution: Execution) -> None: ...
 
     def finish_execution(self, proposal_id: str, execution: Execution) -> None: ...
@@ -127,6 +133,15 @@ class InMemoryProposalStore:
             if any(a.approver == approval.approver for a in stored.approvals):
                 raise DuplicateApproval(approval.approver)
             stored.approvals.append(approval)
+
+    def renew_approval(self, approval: Approval) -> None:
+        with self._lock:
+            stored = self._records[approval.proposal_id]
+            stored.approvals = [a for a in stored.approvals if a.approver != approval.approver] + [approval]
+
+    def in_state(self, state: ProposalState) -> list[ProposalRecord]:
+        found = [r for r in self._records.values() if r.state is state]
+        return [replace(r, approvals=list(r.approvals)) for r in found]
 
     def start_execution(self, proposal_id: str, execution: Execution) -> None:
         with self._lock:
