@@ -29,16 +29,18 @@ flowchart LR
 def ingest(self, raw: bytes, adapter: SourceAdapter) -> IngestResult:
     payload = adapter.parse(raw)  # size limit, JSON object, required fields
     key = dedup_key(adapter.name, adapter.source_event_id(payload))
-    if self.events.exists(key):
-        return IngestResult("duplicate", key)
+    stored = self.events.find(key)
+    if stored is not None:
+        return self._redelivered(stored, key)  # finishes anything a failed attempt left undone
 
     now = self.clock()
+    event = adapter.to_event(payload, event_id=new_id("evt"), ingest_time=now, raw_uri="", checksum="")
     uri, checksum = self.evidence.archive(adapter.name, raw, now)  # S3: SSE-KMS, versioned, Object Lock
-    event = adapter.to_event(payload, event_id=new_id("evt"), ingest_time=now, raw_uri=uri, checksum=checksum)
+    event = event.model_copy(update={"raw_evidence_uri": uri, "checksum": checksum})
     try:
         self.events.insert(event, key)  # unique constraint is the second line of defense
     except DuplicateEventError:
-        return IngestResult("duplicate", key)
+        return self._redelivered(self.events.find(key), key)
     if self.on_accepted:
         self.on_accepted(event)  # correlation
     return IngestResult("accepted", key, event.event_id)
@@ -49,6 +51,7 @@ Producers authenticate before this runs ([`services/ingestion/auth.py`](../servi
 ### Reliability guarantees
 
 - **Idempotent ingestion.** Redelivered events never create duplicate cases (dedup key plus a database unique constraint).
+- **A retry finishes the job.** Storing an event, linking it to a case and auditing the link are separate writes, not one transaction. If one fails, the producer gets a 500, and its retry completes what's missing without linking or auditing twice ([tests](../tests/test_ingest_failures.py)). The limit: this needs a retry. If a producer never sends the event again, it stays stored but not in a case, and nothing sweeps for that yet.
 - **Bounded retries and a dead-letter path.** Nothing is silently dropped.
 - **Event time, not arrival time.** Timelines are built on `event_time`, which protects against out-of-order delivery and clock skew.
 - **Lineage.** Every derived claim points to supporting event IDs; raw evidence is never overwritten.

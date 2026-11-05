@@ -1,4 +1,9 @@
-"""Idempotent ingestion: one source event produces at most one normalized event."""
+"""Idempotent ingestion: one source event produces at most one normalized event.
+
+Storing an event and linking it to a case are separate writes, so a failure can fall between them.
+A redelivery therefore runs on_accepted again, which finishes whatever is left. on_accepted has to
+be safe to run twice for one event.
+"""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -8,7 +13,7 @@ from typing import Literal, Protocol
 from common.ids import new_id
 from common.models import NormalizedEvent
 from common.timeutil import utcnow
-from ingestion.adapters.base import SourceAdapter, dedup_key
+from ingestion.adapters.base import PayloadError, SourceAdapter, dedup_key
 from ingestion.evidence import EvidenceStore
 
 
@@ -17,7 +22,7 @@ class DuplicateEventError(Exception):
 
 
 class EventStore(Protocol):
-    def exists(self, dedup_key: str) -> bool: ...
+    def find(self, dedup_key: str) -> NormalizedEvent | None: ...
 
     def insert(self, event: NormalizedEvent, dedup_key: str) -> None: ...
 
@@ -31,8 +36,8 @@ class InMemoryEventStore:
         self._by_key: dict[str, NormalizedEvent] = {}
         self._by_id: dict[str, NormalizedEvent] = {}
 
-    def exists(self, dedup_key: str) -> bool:
-        return dedup_key in self._by_key
+    def find(self, dedup_key: str) -> NormalizedEvent | None:
+        return self._by_key.get(dedup_key)
 
     def insert(self, event: NormalizedEvent, dedup_key: str) -> None:
         if dedup_key in self._by_key:
@@ -71,15 +76,22 @@ class IngestPipeline:
 
     def ingest(self, raw: bytes, adapter: SourceAdapter) -> IngestResult:
         payload = adapter.parse(raw)
-        key = dedup_key(adapter.name, adapter.source_event_id(payload))
-        if self.events.exists(key):
-            return IngestResult("duplicate", key)
-
         now = self.clock()
+        try:
+            key = dedup_key(adapter.name, adapter.source_event_id(payload))
+            stored = self.events.find(key)
+            if stored is not None:
+                return self._redelivered(stored, key)
+            # Converted before anything is archived, so a payload we can't read leaves nothing behind.
+            event = adapter.to_event(
+                payload, event_id=new_id("evt"), ingest_time=now, raw_uri="", checksum=""
+            )
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            # parse() only checks the shape: a value inside it can still be unusable.
+            raise PayloadError(f"unusable value in payload: {exc}") from exc
+
         uri, checksum = self.evidence.archive(adapter.name, raw, now)
-        event = adapter.to_event(
-            payload, event_id=new_id("evt"), ingest_time=now, raw_uri=uri, checksum=checksum
-        )
+        event = event.model_copy(update={"raw_evidence_uri": uri, "checksum": checksum})
         if self.enrich:
             # Before insert, so the stored event and correlation both see resolved identity and keys.
             event = self.enrich(event)
@@ -87,8 +99,15 @@ class IngestPipeline:
             self.events.insert(event, key)
         except DuplicateEventError:
             # Lost a race with a concurrent delivery of the same event.
-            return IngestResult("duplicate", key)
+            stored = self.events.find(key)
+            return self._redelivered(stored, key) if stored else IngestResult("duplicate", key)
 
         if self.on_accepted:
             self.on_accepted(event)
         return IngestResult("accepted", key, event.event_id)
+
+    def _redelivered(self, event: NormalizedEvent, key: str) -> IngestResult:
+        """The event is stored, but an earlier attempt may have failed before finishing with it."""
+        if self.on_accepted:
+            self.on_accepted(event)
+        return IngestResult("duplicate", key)

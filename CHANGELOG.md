@@ -2,6 +2,13 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+- **A retry could lose an event from its case.** If correlation or the audit write failed after an event was stored, the producer's retry counted as a duplicate, so the event never joined a case. A redelivery now finishes whatever a failed attempt left undone: an event links once and is audited once.
+- **A payload with a usable shape and an unusable value** (a garbage timestamp) returned a 500 after its raw bytes had been archived. It now returns a 422 and leaves nothing behind.
+- **A non-ASCII byte in a credential** returned a 500 instead of a 401 at the ingest routes and the responder. Nothing was ingested or executed, but it was the wrong answer.
+
 ## [0.6.0] - 2026-11-05
 
 The AWS paths now run in CI on emulators, with no AWS account. This is not a deployment: nothing here has run on real AWS, EKS or Bedrock.

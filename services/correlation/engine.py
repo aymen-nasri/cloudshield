@@ -54,6 +54,11 @@ class CorrelationEngine:
             return self._correlate(event)
 
     def _correlate(self, event: NormalizedEvent) -> tuple[Case, CaseLink]:
+        # A redelivery, or the retry of an attempt that failed later on: an event only ever joins once.
+        linked = self.cases.case_for_event(event.event_id)
+        if linked is not None:
+            return linked, next(link for link in linked.links if link.event_id == event.event_id)
+
         for rule in RULES:
             value = getattr(event.keys, rule.key)
             if not value:
