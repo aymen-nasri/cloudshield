@@ -23,6 +23,31 @@ class Decision(StrEnum):
     DENY = "deny"
 
 
+_ACTION_KEYS = {"class", "environments", "target", "approvals", "require_dry_run", "rollback"}
+_TARGET_KEYS = {"kinds", "allowed_namespaces", "denied_namespaces"}
+_APPROVAL_KEYS = {"min", "roles", "ttl_minutes", "escalate_when_labels", "escalated_min"}
+
+
+def _check_policy(action_type: str, raw: dict[str, Any]) -> None:
+    """Refuse a file that doesn't say what it appears to say. In a policy, a typo must not widen anything."""
+    target, approvals = raw.get("target", {}), raw.get("approvals", {})
+    for section, known, keys in (
+        ("", _ACTION_KEYS, raw),
+        ("target.", _TARGET_KEYS, target),
+        ("approvals.", _APPROVAL_KEYS, approvals),
+    ):
+        if unknown := set(keys) - known:
+            raise ValueError(f"{action_type}: unknown policy setting {section}{sorted(unknown)[0]}")
+    if not raw.get("environments"):
+        raise ValueError(f"{action_type}: environments must list at least one environment")
+    if not target.get("kinds"):
+        raise ValueError(f"{action_type}: target.kinds must list at least one kind")
+    if "Pod" in target["kinds"] and not target.get("allowed_namespaces"):
+        raise ValueError(f"{action_type}: an action on pods needs target.allowed_namespaces")
+    if int(approvals.get("min", 1)) > 0 and not approvals.get("roles"):
+        raise ValueError(f"{action_type}: an action needing approval needs approvals.roles")
+
+
 @dataclass(frozen=True)
 class ActionPolicy:
     action_type: str
@@ -41,6 +66,7 @@ class ActionPolicy:
 
     @classmethod
     def from_dict(cls, action_type: str, raw: dict[str, Any]) -> "ActionPolicy":
+        _check_policy(action_type, raw)
         target = raw.get("target", {})
         approvals = raw.get("approvals", {})
         return cls(
