@@ -4,7 +4,7 @@ import copy
 from datetime import datetime, timedelta
 from typing import Any
 
-from responder.quarantine import QUARANTINE_LABEL
+from responder.quarantine import QUARANTINE_LABEL, TargetReplaced
 
 DEFAULT_DENY = {
     "metadata": {"name": "default-deny-all"},
@@ -50,8 +50,10 @@ class FakePodApi:
         return copy.deepcopy(self.pod)
 
     def patch_pod_labels(
-        self, namespace: str, name: str, labels: dict[str, str | None], *, dry_run: bool
+        self, namespace: str, name: str, labels: dict[str, str | None], *, uid: str, dry_run: bool
     ) -> None:
+        if self.pod is not None and self.pod["metadata"]["uid"] != uid:
+            raise TargetReplaced(name)  # what the API server does when metadata.uid doesn't match
         self.patches.append((labels, dry_run))
         if not dry_run and self.pod is not None:
             for key, value in labels.items():

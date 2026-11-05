@@ -56,7 +56,9 @@ class FakePodApi:
     def get_pod(self, namespace, name):
         return copy.deepcopy(self.pod) if name == self.pod["metadata"]["name"] else None
 
-    def patch_pod_labels(self, namespace, name, labels, *, dry_run):
+    def patch_pod_labels(self, namespace, name, labels, *, uid, dry_run):
+        if uid != self.pod["metadata"]["uid"]:
+            raise quarantine.TargetReplaced(name)
         self.patches.append((labels, dry_run))
         if not dry_run:
             for k, v in labels.items():
@@ -80,6 +82,19 @@ def test_apply_is_idempotent():
     assert apply_quarantine(api, TARGET, dry_run=False).status == "applied"
     assert apply_quarantine(api, TARGET, dry_run=False).status == "already_applied"
     assert len(api.patches) == 1
+
+
+def test_a_pod_replaced_between_the_read_and_the_patch_is_not_labelled():
+    class ReplacedAfterRead(FakePodApi):
+        def get_pod(self, namespace, name):
+            pod = super().get_pod(namespace, name)
+            self.pod["metadata"]["uid"] = "uid-of-the-replacement"
+            return pod
+
+    api = ReplacedAfterRead()
+    assert apply_quarantine(api, TARGET, dry_run=False).status == "stale_target"
+    assert QUARANTINE_LABEL not in api.pod["metadata"]["labels"]
+    assert api.patches == []
 
 
 def test_stale_target_is_refused():

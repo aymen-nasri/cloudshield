@@ -130,11 +130,18 @@ spec:
 
 - **Separation of privileges:** the LLM has read-only tools; the executor has action-specific IAM/RBAC and nothing else. In the lab it's a separate pod: the API holds no Kubernetes write access and calls it with a shared token, and the responder re-checks policy itself.
 - **Structured action schemas** with exact resource identifiers, environment and expiry.
-- **An independent policy engine** that checks target allowlists, change windows, approver authorization and risky dependencies.
+- **An independent policy engine** that checks target allowlists and approver authorization. Change windows and risky dependencies are 📐 planned, not checked yet.
 - **Explicit dry-run.** Failing to approve means no action.
 - **Time-bounded approvals** bound to the proposal hash, with protection against replay, stale targets and duplicate execution.
 - **Verification, audit records, a rollback plan and on-call escalation** for every action.
 - **Meaningful human review:** the console shows evidence, consequences and alternatives, not just an "Approve" button.
+
+**When things go wrong partway:**
+
+- **A mistake in the policy file** stops startup. An unknown setting or a missing required one is refused, so a typo can't quietly remove a restriction.
+- **An approval that expires while waiting for a second one** can be given again by the same person. It's a new decision with its own justification and audit record, and each person still holds only one.
+- **A process that dies during an action** leaves a proposal in `executing`. The next startup marks it `failed` and escalates it. It's never retried, because the action may or may not have been applied: a person checks the target and starts a new proposal. This assumes one replica, since a second one would see the first one's running actions as abandoned.
+- **A pod replaced just before the patch** is refused by the API server, because the patch carries the pod's UID.
 
 ---
 

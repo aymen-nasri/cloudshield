@@ -53,7 +53,7 @@ class SimulatedPodApi:
         return copy.deepcopy(self.pod) if name == POD else None
 
     def patch_pod_labels(
-        self, namespace: str, name: str, labels: dict[str, str | None], *, dry_run: bool
+        self, namespace: str, name: str, labels: dict[str, str | None], *, uid: str, dry_run: bool
     ) -> None:
         if not dry_run:
             self.pod["metadata"]["labels"].update({k: v for k, v in labels.items() if v is not None})

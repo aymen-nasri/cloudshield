@@ -66,6 +66,104 @@ def _approve(env, record, who=BOB):
     )  # fmt: skip
 
 
+def _needs_two_approvals(env):
+    env.pods.pod["metadata"]["labels"]["cloudshield.io/tier"] = "critical"
+    record = _ready(env)
+    assert record.policy.required_approvals == 2
+    return record
+
+
+def test_an_expired_approval_can_be_given_again(env):
+    """This used to be a dead end: the first approver was refused, and the proposal sat until it expired."""
+    record = _needs_two_approvals(env)
+    _approve(env, record, BOB)
+    env.clock.advance(minutes=16)
+
+    assert _approve(env, record, CAROL).state is S.AWAITING_APPROVAL  # Bob's approval no longer counts
+    renewed = _approve(env, record, BOB)
+
+    assert renewed.state is S.APPROVED
+    assert sorted(a.approver for a in renewed.approvals) == [BOB.id, CAROL.id]  # still one each
+    stored = env.service.get(record.proposal.proposal_id)
+    assert sorted(a.approver for a in stored.approvals) == [BOB.id, CAROL.id]
+    assert env.service.execute(record.proposal.proposal_id, BOB).state is S.VERIFIED
+    granted = [r for r in env.stores.audit.records(env.case_id) if r.action == "approval.granted"]
+    assert [r.details.get("renewed", False) for r in granted] == [False, False, True]
+
+
+def test_an_approval_still_in_date_cannot_be_given_twice(env):
+    record = _needs_two_approvals(env)
+    _approve(env, record, BOB)
+    env.clock.advance(minutes=14)
+    with pytest.raises(Conflict, match="already decided"):
+        _approve(env, record, BOB)
+
+
+def test_a_rejection_cannot_be_turned_into_an_approval_later(env):
+    record = _needs_two_approvals(env)
+    proposal_id = record.proposal.proposal_id
+    env.service.decide(
+        proposal_id, BOB, decision="reject", bound_hash=record.proposal_hash, justification="not this pod"
+    )
+    env.clock.advance(minutes=16)
+    with pytest.raises(Conflict):
+        _approve(env, record, BOB)
+    assert env.service.get(proposal_id).state is S.REJECTED
+
+
+def _dies_during_execution(env):
+    class ProcessDied(BaseException):
+        pass
+
+    record = _approve(env, _ready(env))
+
+    def die(*args, **kwargs):
+        raise ProcessDied
+
+    real = env.service.executor.execute
+    env.service.executor.execute = die
+    with pytest.raises(ProcessDied):
+        env.service.execute(record.proposal.proposal_id, BOB)
+    env.service.executor.execute = real
+    return record.proposal.proposal_id
+
+
+def test_a_run_the_process_never_finished_fails_at_the_next_startup(env):
+    proposal_id = _dies_during_execution(env)
+    assert env.service.get(proposal_id).state is S.EXECUTING
+
+    assert env.service.recover_interrupted() == [proposal_id]
+
+    record = env.service.get(proposal_id)
+    assert record.state is S.FAILED
+    assert record.execution.status == "interrupted"
+    assert record.execution.finished_at is not None
+    assert env.pods.real_patches == []  # it reports; it never retries the action
+    failed = [r for r in env.stores.audit.records(env.case_id) if r.action == "proposal.failed"]
+    assert failed[0].details["escalate"] == "on-call"
+    assert env.stores.audit.verify() is None
+
+
+def test_recovery_leaves_everything_else_alone(env):
+    waiting = _ready(env)
+    finished = env.service.execute(_approve(env, _ready(env)).proposal.proposal_id, BOB)
+
+    assert env.service.recover_interrupted() == []
+
+    assert env.service.get(finished.proposal.proposal_id).state is S.VERIFIED
+    assert env.service.get(waiting.proposal.proposal_id).state is S.AWAITING_APPROVAL
+
+
+def test_after_recovery_a_new_proposal_can_finish_the_job(env):
+    proposal_id = _dies_during_execution(env)
+    env.service.recover_interrupted()
+
+    fresh = _approve(env, _ready(env))
+
+    assert fresh.proposal.proposal_id != proposal_id
+    assert env.service.execute(fresh.proposal.proposal_id, BOB).state is S.VERIFIED
+
+
 def test_t01_happy_path_is_verified_and_audited(env):
     record = env.service.create(env.case_id, ALICE, action_type=QUARANTINE, target=TARGET, rationale="x")
     assert record.state is S.PROPOSED
