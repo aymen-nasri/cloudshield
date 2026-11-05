@@ -383,7 +383,8 @@ class PostgresProposalStore:
             with self.db.pool.connection() as conn:
                 conn.execute(
                     "INSERT INTO approval (id, proposal_id, approver, approver_roles, decision,"
-                    " justification, bound_hash, decided_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                    " justification, bound_hash, decided_at, signature, signed_at)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                     (
                         new_id("apr"),
                         approval.proposal_id,
@@ -393,6 +394,8 @@ class PostgresProposalStore:
                         approval.justification,
                         approval.bound_hash,
                         approval.decided_at,
+                        approval.signature,
+                        approval.signed_at,
                     ),
                 )
         except errors.UniqueViolation as exc:
@@ -402,13 +405,16 @@ class PostgresProposalStore:
         with self.db.pool.connection() as conn:
             conn.execute(
                 "UPDATE approval SET approver_roles = %s, decision = %s, justification = %s,"
-                " bound_hash = %s, decided_at = %s WHERE proposal_id = %s AND approver = %s",
+                " bound_hash = %s, decided_at = %s, signature = %s, signed_at = %s"
+                " WHERE proposal_id = %s AND approver = %s",
                 (
                     sorted(approval.approver_roles),
                     approval.decision,
                     approval.justification,
                     approval.bound_hash,
                     approval.decided_at,
+                    approval.signature,
+                    approval.signed_at,
                     approval.proposal_id,
                     approval.approver,
                 ),
@@ -497,6 +503,8 @@ class PostgresProposalStore:
                         decision=a["decision"],
                         bound_hash=a["bound_hash"],
                         decided_at=a["decided_at"],
+                        signature=a["signature"],
+                        signed_at=a["signed_at"],
                         justification=a["justification"],
                     )
                     for a in approvals

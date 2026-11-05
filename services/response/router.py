@@ -3,7 +3,7 @@
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 from common.models import Target
 from core.auth import AnalystDirectory, Principal
@@ -20,6 +20,9 @@ class ProposalRequest(BaseModel):
 class DecisionRequest(BaseModel):
     proposal_hash: str
     justification: str = Field(min_length=1, max_length=2000)
+    # From scripts/sign_approval.py, where the responder checks approvals for itself.
+    signature: str | None = Field(default=None, max_length=512)
+    signed_at: AwareDatetime | None = None
 
 
 def build_router(service: ResponseService, analysts: AnalystDirectory) -> APIRouter:
@@ -75,6 +78,8 @@ def build_router(service: ResponseService, analysts: AnalystDirectory) -> APIRou
             decision="approve",
             bound_hash=body.proposal_hash,
             justification=body.justification,
+            signature=body.signature,
+            signed_at=body.signed_at,
         )
 
     @router.post("/proposals/{proposal_id}/reject")
