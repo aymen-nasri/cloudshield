@@ -2,7 +2,7 @@
 
 Every technology by layer, what it is for, and whether it is built. Part of the [CloudShield documentation](../README.md#documentation).
 
-Status markers: ✅ built and tested · 🧩 written as code, not deployed · 📐 designed only.
+Status markers: ✅ built and tested · 🧩 written as code, not deployed · 📐 designed only · 🔬 run on an emulator or a stand-in, not on real AWS.
 
 ## Technology stack by layer
 
@@ -15,14 +15,15 @@ Status markers: ✅ built and tested · 🧩 written as code, not deployed · �
 | **Amazon EKS** | Managed Kubernetes | Workload and cluster metadata, EKS identity context | 🧩 |
 | **AWS IAM** | Authorization and roles | Least-privilege *read* roles, separately scoped *response* roles | 🧩 |
 | **AWS CloudTrail** | AWS API activity history | Selective query and export; not a host activity feed | 📐 |
-| **Amazon GuardDuty** | Managed threat detection | Findings delivered via EventBridge [[R2]](references.md#references); CloudShield never duplicates managed detection | ✅ adapter · 🧩 detector |
+| **Amazon GuardDuty** | Managed threat detection | Findings delivered via EventBridge [[R2]](references.md#references); CloudShield never duplicates managed detection | ✅ adapter · 🧩 detector · 🔬 finding delivery, not detection |
 | **AWS Security Hub** | Finding aggregation and posture | Can re-publish GuardDuty findings [[R3]](references.md#references), so canonical IDs and dedup are mandatory | 📐 |
-| **Amazon EventBridge** | Routing selected security events | Rule filters → SQS → CloudShield adapter | 🧩 |
-| **Amazon SQS** | Durable buffering between AWS and CloudShield | Redrive to a dead-letter queue; no silent loss | ✅ consumer · 🧩 queues |
-| **AWS Lambda** | Short, explicitly scoped response handlers | Invoked only after authorization and approval | ✅ handler · 🧩 deployment |
-| **AWS Step Functions** | Durable response orchestration | Tracks steps, approval waits, timeouts and retries | 🧩 definition, statically tested |
-| **Amazon S3** | Evidence and report storage | SSE-KMS, versioning, Object Lock, lifecycle, checksums | ✅ store · 🧩 bucket |
-| **Amazon Bedrock** | Managed LLM inference | Investigation summaries only; no AWS mutation rights | 🧩 client, not yet run |
+| **Amazon EventBridge** | Routing selected security events | Rule filters → SQS → CloudShield adapter | 🧩 · 🔬 on Moto |
+| **Amazon SQS** | Durable buffering between AWS and CloudShield | Redrive to a dead-letter queue; no silent loss | ✅ consumer · 🧩 queues · 🔬 on Moto |
+| **AWS Lambda** | Short, explicitly scoped response handlers | Invoked only after authorization and approval | ✅ handler · 🧩 deployment · 🔬 called through a stand-in Invoke API |
+| **AWS Step Functions** | Durable response orchestration | Tracks steps, approval waits, timeouts and retries | 🧩 definition · 🔬 run on Step Functions Local |
+| **Amazon S3** | Evidence and report storage | SSE-KMS, versioning, Object Lock, lifecycle, checksums | ✅ store · 🧩 bucket · 🔬 on Moto |
+| **Amazon Bedrock** | Managed LLM inference | Investigation summaries only; no AWS mutation rights | 🧩 client, not yet run · 🔬 request format only |
+| **Ollama** | A language model on your own machine, for free | Runs the investigation checks in CI with no AWS account | ✅ client and CI job, with a small model |
 | **Amazon ECR** | Container image registry | Only signed, scanned images are deployed | 🧩 |
 
 **Identity design.** CloudShield workloads on EKS get narrowly scoped AWS permissions through **EKS Pod Identity** [[R4]](references.md#references). Read-only evidence roles are separate from action roles. No static AWS access keys exist in containers or CI jobs.

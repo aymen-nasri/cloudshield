@@ -4,6 +4,7 @@ import pytest
 
 from common.models import Severity
 from common.timeutil import parse_time
+from enrichment.enricher import pod_ref
 from ingestion.adapters import PayloadError, WazuhAdapter
 from tests.conftest import ACCOUNT, CLUSTER, NOW, fixture_bytes
 
@@ -18,6 +19,15 @@ def _event(adapter, raw: bytes):
     return adapter.to_event(
         payload, event_id="evt_x", ingest_time=NOW, raw_uri="mem://x", checksum="sha256:x"
     )
+
+
+def test_both_detectors_name_the_same_pod_the_same_way(falco, guardduty):
+    """A real model's answer exposed this: one pod was two entities, and enrichment skipped one of them."""
+    from_falco = _event(falco, fixture_bytes("s1_suspicious_process", "falco_alert.json"))
+    from_guardduty = _event(guardduty, fixture_bytes("s1_suspicious_process", "guardduty_finding.json"))
+
+    assert from_guardduty.resource_id == from_falco.resource_id
+    assert pod_ref(from_guardduty.resource_id) == ("shop", "checkout-7d9f6c-x2k8p")
 
 
 def test_falco_alert_is_normalized_with_pod_context(falco):
