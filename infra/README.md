@@ -26,7 +26,7 @@ make lab-up       # kind + Calico + shop app + policies + RBAC + PostgreSQL + Cl
 make lab-e2e      # scenario S1 against the cluster, with real traffic checks
 make lab-down
 make infra-check  # tofu validate, helm lint, kubeconform, kyverno test, Ansible syntax check
-bash scripts/emulated_aws.sh  # applies the detection path and evidence bucket to Moto, then tests them
+bash scripts/emulated_aws.sh  # applies the detection path and evidence bucket to Moto, then runs the app against them
 ```
 
 The AWS lab (budget alarms first, destroy after each session) is described in [ADR 0004](../docs/adr/0004-lab-account-and-state.md).

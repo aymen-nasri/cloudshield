@@ -4,6 +4,9 @@ All notable changes to CloudShield. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Added
+- **The app can now use its AWS paths.** `CLOUDSHIELD_EVIDENCE_BUCKET` and `CLOUDSHIELD_EVIDENCE_KMS_KEY_ID` keep evidence in S3, and `CLOUDSHIELD_FINDINGS_QUEUE_URL` runs a worker that reads GuardDuty findings from SQS. Both existed and were tested, but nothing started them. Findings from the queue now count toward sensor coverage and the ingest metrics. This has run on the Moto emulator only, not on real AWS.
+
 ### Fixed
 - **A retry could lose an event from its case.** If correlation or the audit write failed after an event was stored, the producer's retry counted as a duplicate, so the event never joined a case. A redelivery now finishes whatever a failed attempt left undone: an event links once and is audited once.
 - **A payload with a usable shape and an unusable value** (a garbage timestamp) returned a 500 after its raw bytes had been archived. It now returns a 422 and leaves nothing behind.
