@@ -1,0 +1,56 @@
+# PostgreSQL for the kind lab. It has its own namespace because the image policy only admits images
+# this repository's CI signed in the cloudshield namespace. The password Secret comes from
+# infra/kind/deploy-cloudshield.sh.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudshield-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: cloudshield-data
+spec:
+  clusterIP: None
+  selector: { app: postgres }
+  ports: [{ port: 5432 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: cloudshield-data
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - { name: POSTGRES_DB, value: cloudshield }
+            - { name: POSTGRES_USER, value: cloudshield }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres, key: password }
+          ports: [{ containerPort: 5432 }]
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "cloudshield", "-d", "cloudshield"]
+            periodSeconds: 3
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 1Gi }

@@ -7,6 +7,14 @@ cd "$(dirname "$0")/../.."
 docker build -t cloudshield/core:lab .
 kind load docker-image cloudshield/core:lab --name cloudshield-lab
 
+# PostgreSQL first: CloudShield applies its migrations when it starts. Keep the password across re-runs.
+kubectl apply -f infra/kind/postgres.yaml
+password=$(kubectl -n cloudshield-data get secret postgres -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)
+[ -n "$password" ] || password=$(openssl rand -hex 16)
+kubectl -n cloudshield-data create secret generic postgres --from-literal=password="$password" \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n cloudshield-data rollout status statefulset/postgres --timeout=3m
+
 # Lab-only credentials. scripts/lab_e2e.py and Falcosidekick use these same tokens.
 analysts=$(python3 -c '
 import hashlib, json
@@ -18,6 +26,7 @@ print(json.dumps({
 kubectl -n cloudshield create secret generic cloudshield-ingest-credentials \
   --from-literal=CLOUDSHIELD_FALCO_TOKEN=lab-falco-key \
   --from-literal=CLOUDSHIELD_ANALYSTS="$analysts" \
+  --from-literal=CLOUDSHIELD_DATABASE_URL="postgresql://cloudshield:$password@postgres.cloudshield-data.svc:5432/cloudshield" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # Kubernetes fills the responder and prober token Secrets shortly after they are created.
