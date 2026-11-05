@@ -30,11 +30,13 @@ kubectl -n cloudshield create secret generic cloudshield-ingest-credentials \
   --from-literal=CLOUDSHIELD_DATABASE_URL="postgresql://cloudshield:$password@postgres.cloudshield-data.svc:5432/cloudshield" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# Kubernetes fills the responder and prober token Secrets shortly after they are created.
-for secret in cloudshield-responder-token cloudshield-prober-token; do
-  until [ -n "$(kubectl -n cloudshield get secret "$secret" -o jsonpath='{.data.token}')" ]; do
-    sleep 1
-  done
+# The token the API uses to call the responder. Keep it across re-runs.
+kubectl -n cloudshield get secret cloudshield-responder-api >/dev/null 2>&1 ||
+  kubectl -n cloudshield create secret generic cloudshield-responder-api --from-literal=token="$(openssl rand -hex 32)"
+
+# Kubernetes fills the prober's token Secret shortly after it is created.
+until [ -n "$(kubectl -n cloudshield get secret cloudshield-prober-token -o jsonpath='{.data.token}')" ]; do
+  sleep 1
 done
 
 helm upgrade --install cloudshield infra/helm/cloudshield -n cloudshield \
