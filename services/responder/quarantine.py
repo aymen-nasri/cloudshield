@@ -23,13 +23,32 @@ QUARANTINE_LABEL = "cloudshield.io/quarantine"
 Status = Literal["dry_run_ok", "applied", "already_applied", "removed", "stale_target", "not_found"]
 
 
+class TargetReplaced(Exception):
+    """The API server refused a patch because the pod now has a different UID."""
+
+
+def label_patch(uid: str, labels: dict[str, str | None]) -> list[dict[str, str]]:
+    """A JSON Patch that only applies to the pod with this UID.
+
+    The test runs on the server, in the same step as the change, so nothing can slip in between. Putting
+    metadata.uid in a merge patch doesn't do this: a real API server accepted a wrong one (dry run, kind lab).
+    """
+    ops = [{"op": "test", "path": "/metadata/uid", "value": uid}]
+    for key, value in labels.items():
+        path = "/metadata/labels/" + key.replace("~", "~0").replace("/", "~1")
+        ops.append(
+            {"op": "remove", "path": path} if value is None else {"op": "add", "path": path, "value": value}
+        )
+    return ops
+
+
 class PodApi(Protocol):
     """The subset of the Kubernetes API the responder needs, as plain dicts."""
 
     def get_pod(self, namespace: str, name: str) -> dict[str, Any] | None: ...
 
     def patch_pod_labels(
-        self, namespace: str, name: str, labels: dict[str, str | None], *, dry_run: bool
+        self, namespace: str, name: str, labels: dict[str, str | None], *, uid: str, dry_run: bool
     ) -> None: ...
 
     def list_network_policies(self, namespace: str) -> list[dict[str, Any]]: ...
@@ -80,22 +99,38 @@ def _check_target(api: PodApi, target: Target) -> tuple[dict[str, Any] | None, E
     return pod, None
 
 
+def _patch(
+    api: PodApi, target: Target, labels: dict[str, str | None], *, dry_run: bool
+) -> ExecutionResult | None:
+    """A pod replaced between the read and this patch has a new UID, and the API server refuses it."""
+    if target.namespace is None:
+        return ExecutionResult("not_found", "target has no namespace")
+    try:
+        api.patch_pod_labels(target.namespace, target.name, labels, uid=target.uid, dry_run=dry_run)
+    except TargetReplaced:
+        return ExecutionResult("stale_target", "pod was replaced before the patch reached it (UID changed)")
+    return None
+
+
 def apply_quarantine(api: PodApi, target: Target, *, dry_run: bool) -> ExecutionResult:
     pod, problem = _check_target(api, target)
     if problem or pod is None or target.namespace is None:
         return problem or ExecutionResult("not_found")
     if (pod["metadata"].get("labels") or {}).get(QUARANTINE_LABEL) == "true":
         return ExecutionResult("already_applied", "label already present; nothing to do")  # idempotent
-    api.patch_pod_labels(target.namespace, target.name, {QUARANTINE_LABEL: "true"}, dry_run=dry_run)
+    if replaced := _patch(api, target, {QUARANTINE_LABEL: "true"}, dry_run=dry_run):
+        return replaced
     return ExecutionResult("dry_run_ok" if dry_run else "applied")
 
 
 def remove_quarantine(api: PodApi, target: Target, *, dry_run: bool) -> ExecutionResult:
-    _, problem = _check_target(api, target)
-    if problem or target.namespace is None:
+    pod, problem = _check_target(api, target)
+    if problem or pod is None or target.namespace is None:
         return problem or ExecutionResult("not_found")
-    # A JSON merge patch with null deletes the label.
-    api.patch_pod_labels(target.namespace, target.name, {QUARANTINE_LABEL: None}, dry_run=dry_run)
+    if QUARANTINE_LABEL not in (pod["metadata"].get("labels") or {}):
+        return ExecutionResult("dry_run_ok" if dry_run else "removed", "label already gone; nothing to do")
+    if replaced := _patch(api, target, {QUARANTINE_LABEL: None}, dry_run=dry_run):
+        return replaced
     return ExecutionResult("dry_run_ok" if dry_run else "removed")
 
 
@@ -273,11 +308,21 @@ class KubernetesPodApi:
             raise
 
     def patch_pod_labels(
-        self, namespace: str, name: str, labels: dict[str, str | None], *, dry_run: bool
+        self, namespace: str, name: str, labels: dict[str, str | None], *, uid: str, dry_run: bool
     ) -> None:
-        self._core.patch_namespaced_pod(
-            name, namespace, {"metadata": {"labels": labels}}, dry_run="All" if dry_run else None
-        )
+        from kubernetes.client.exceptions import ApiException
+
+        try:
+            self._core.patch_namespaced_pod(
+                name, namespace, label_patch(uid, labels), dry_run="All" if dry_run else None
+            )
+        except ApiException as exc:
+            # A failed patch can have other causes, so look at the pod rather than assume.
+            if exc.status in (404, 409, 422):
+                current = self.get_pod(namespace, name)
+                if current is None or current["metadata"]["uid"] != uid:
+                    raise TargetReplaced(name) from exc
+            raise
 
     def list_network_policies(self, namespace: str) -> list[dict[str, Any]]:
         items = self._net.list_namespaced_network_policy(namespace).items
