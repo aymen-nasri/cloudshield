@@ -1,6 +1,7 @@
 """Application factory. Run with: uvicorn core.app:create_app --factory"""
 
 import os
+import threading
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -268,20 +269,30 @@ def create_app(
         pod_resolver = kubernetes_pod_resolver(settings.cluster, settings.region)
     enrich = Enricher(pod_resolver, stores.entities) if pod_resolver else None
 
+    link_lock = threading.Lock()
+
     def on_accepted(event: NormalizedEvent) -> None:
+        """Also runs on a redelivery, to finish anything a failed attempt left undone."""
+        with link_lock:  # two deliveries of one event must not both write its audit record
+            case, link = engine.correlate(event)
+            already_audited = any(
+                r.action == "case.event_linked" and r.details.get("event_id") == event.event_id
+                for r in stores.audit.records(case.case_id)
+            )
+            if already_audited:
+                return
+            stores.audit.append(
+                "service",
+                "correlation-engine",
+                "case.event_linked",
+                {
+                    "case_id": case.case_id,
+                    "event_id": event.event_id,
+                    "rule": link.rule,
+                    "rationale": link.rationale,
+                },
+            )
         metrics.observe_event(event)
-        case, link = engine.correlate(event)
-        stores.audit.append(
-            "service",
-            "correlation-engine",
-            "case.event_linked",
-            {
-                "case_id": case.case_id,
-                "event_id": event.event_id,
-                "rule": link.rule,
-                "rationale": link.rationale,
-            },
-        )
 
     pipeline = IngestPipeline(stores.events, evidence, on_accepted=on_accepted, enrich=enrich)
     adapters: dict[str, SourceAdapter] = {
