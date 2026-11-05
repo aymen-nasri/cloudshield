@@ -180,7 +180,7 @@ COVERAGE   Falco ● ok    GuardDuty ● ok    Wazuh ● degraded (no heartbeat 
 |---|---|---|---|
 | `POST` | `/v1/ingest/falco` | Falcosidekick webhook (bearer token) | Producer with the bearer token |
 | `POST` | `/v1/ingest/wazuh` | Wazuh integration webhook (HMAC-SHA256 signed body) | Producer with the signing secret |
-| — | *worker* `aws-findings-consumer` | Consumes GuardDuty findings from SQS (🧩 not deployed) | IAM role |
+| — | *worker* `aws-findings-consumer` | Consumes GuardDuty findings from SQS, in the API process when `CLOUDSHIELD_FINDINGS_QUEUE_URL` is set (🔬 on Moto, not deployed) | IAM role |
 | `GET` | `/v1/cases` | List cases (filter by status, severity, entity) | Any analyst |
 | `GET` | `/v1/cases/{id}` | Case detail: entities, evidence, investigations, proposals | Any analyst |
 | `GET` | `/v1/cases/{id}/timeline` | Event-time-ordered timeline with sources | Any analyst |

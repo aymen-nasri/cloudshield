@@ -26,9 +26,10 @@ from enrichment.graph import EntityStore, InMemoryEntityStore
 from ingestion.adapters import FalcoAdapter, GuardDutyAdapter, SourceAdapter, WazuhAdapter
 from ingestion.auth import SourceCredential
 from ingestion.coverage import CoverageTracker
-from ingestion.evidence import EvidenceStore, InMemoryEvidenceStore, LocalEvidenceStore
+from ingestion.evidence import EvidenceStore, InMemoryEvidenceStore, LocalEvidenceStore, S3EvidenceStore
 from ingestion.pipeline import EventStore, IngestPipeline, InMemoryEventStore
 from ingestion.router import build_router as build_ingestion_router
+from ingestion.sqs_consumer import SqsConsumer
 from investigator.offline import OfflineBaselineModel
 from investigator.records import InMemoryInvestigationStore, InvestigationStore
 from investigator.router import build_router as build_investigation_router
@@ -60,6 +61,12 @@ class Settings:
     account_id: str | None = None
     region: str | None = None
     evidence_dir: Path | None = None
+    # S3 evidence, instead of a directory. The bucket and its KMS key go together.
+    evidence_bucket: str | None = None
+    evidence_kms_key_id: str | None = None
+    # Reads GuardDuty findings from this queue (EventBridge -> SQS). Unset: no worker runs.
+    findings_queue_url: str | None = None
+    findings_wait_seconds: int = 20
     # postgresql://user:pass@host/db. Unset means in-memory stores (tests, quick demos).
     database_url: str | None = None
     database_schema: str | None = None
@@ -111,6 +118,9 @@ class Settings:
             account_id=os.getenv("CLOUDSHIELD_ACCOUNT_ID"),
             region=os.getenv("AWS_REGION"),
             evidence_dir=Path(evidence_dir) if evidence_dir else None,
+            evidence_bucket=os.getenv("CLOUDSHIELD_EVIDENCE_BUCKET"),
+            evidence_kms_key_id=os.getenv("CLOUDSHIELD_EVIDENCE_KMS_KEY_ID"),
+            findings_queue_url=os.getenv("CLOUDSHIELD_FINDINGS_QUEUE_URL"),
             database_url=os.getenv("CLOUDSHIELD_DATABASE_URL"),
             enrichment=os.getenv("CLOUDSHIELD_ENRICHMENT"),
             executor=os.getenv("CLOUDSHIELD_EXECUTOR"),
@@ -174,6 +184,22 @@ def build_stores(settings: Settings) -> Stores:
         PostgresInvestigationStore(db),
         close=db.close,
     )
+
+
+def build_evidence(settings: Settings) -> EvidenceStore:
+    """Half a configuration fails at startup, rather than quietly keeping evidence somewhere else."""
+    if bool(settings.evidence_bucket) != bool(settings.evidence_kms_key_id):
+        raise ValueError(
+            "S3 evidence needs both CLOUDSHIELD_EVIDENCE_BUCKET and CLOUDSHIELD_EVIDENCE_KMS_KEY_ID"
+        )
+    if settings.evidence_bucket and settings.evidence_dir:
+        raise ValueError("set CLOUDSHIELD_EVIDENCE_BUCKET or CLOUDSHIELD_EVIDENCE_DIR, not both")
+    if settings.evidence_bucket and settings.evidence_kms_key_id:
+        import boto3
+
+        client = boto3.client("s3", region_name=settings.region)
+        return S3EvidenceStore(settings.evidence_bucket, settings.evidence_kms_key_id, client=client)
+    return LocalEvidenceStore(settings.evidence_dir) if settings.evidence_dir else InMemoryEvidenceStore()
 
 
 def build_model(settings: Settings) -> LanguageModel | None:
@@ -261,9 +287,7 @@ def create_app(
     )
 
     engine = CorrelationEngine(stores.cases)
-    evidence: EvidenceStore = (
-        LocalEvidenceStore(settings.evidence_dir) if settings.evidence_dir else InMemoryEvidenceStore()
-    )
+    evidence = build_evidence(settings)
 
     if pod_resolver is None and settings.enrichment == "k8s" and settings.cluster:
         pod_resolver = kubernetes_pod_resolver(settings.cluster, settings.region)
@@ -302,9 +326,37 @@ def create_app(
         "guardduty": GuardDutyAdapter(),
     }
 
+    def on_finding(result: str) -> None:
+        metrics.ingest_events.labels("guardduty", result).inc()
+        if result != "invalid":  # the same rule as the HTTP route: a bad payload isn't a sign of life
+            coverage.heartbeat("guardduty")
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        stop = threading.Event()
+        worker = None
+        if settings.findings_queue_url:
+            import boto3
+
+            consumer = SqsConsumer(
+                settings.findings_queue_url,
+                pipeline,
+                adapters["guardduty"],
+                client=boto3.client("sqs", region_name=settings.region),
+                on_result=on_finding,
+            )
+            worker = threading.Thread(
+                target=consumer.run,
+                args=(stop,),
+                kwargs={"wait_seconds": settings.findings_wait_seconds},
+                name="findings-consumer",
+                daemon=True,
+            )
+            worker.start()
         yield
+        stop.set()
+        if worker:
+            worker.join(settings.findings_wait_seconds + 5)  # it can be in the middle of a long poll
         stores.close()
 
     app = FastAPI(title="CloudShield", version="0.6.0", lifespan=lifespan)
