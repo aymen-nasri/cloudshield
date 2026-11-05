@@ -2,7 +2,7 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.6.0] - 2026-11-05
 
 The AWS paths now run in CI on emulators, with no AWS account. This is not a deployment: nothing here has run on real AWS, EKS or Bedrock.
 
@@ -123,6 +123,7 @@ code and in CI. It has not yet run on a real cluster or AWS account (see the REA
   Trivy image scan and SBOM, and infrastructure validation (tofu validate, helm lint, kubeconform,
   kyverno test, Ansible syntax check).
 
+[0.6.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.6.0
 [0.5.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.5.0
 [0.4.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.4.0
 [0.3.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.3.0
