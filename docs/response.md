@@ -141,7 +141,7 @@ spec:
 - **A mistake in the policy file** stops startup. An unknown setting or a missing required one is refused, so a typo can't quietly remove a restriction.
 - **An approval that expires while waiting for a second one** can be given again by the same person. It's a new decision with its own justification and audit record, and each person still holds only one.
 - **A process that dies during an action** leaves a proposal in `executing`. The next startup marks it `failed` and escalates it. It's never retried, because the action may or may not have been applied: a person checks the target and starts a new proposal. This assumes one replica, since a second one would see the first one's running actions as abandoned.
-- **A pod replaced just before the patch** is refused by the API server, because the patch carries the pod's UID.
+- **A pod replaced just before the patch** is refused by the API server. The patch is a JSON Patch whose first step tests the pod's UID, on the server, in the same operation as the change. A merge patch with `metadata.uid` doesn't do this: the kind lab showed a real API server accepting a wrong one, in a dry run.
 
 ---
 

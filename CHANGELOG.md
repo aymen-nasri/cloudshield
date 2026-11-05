@@ -10,7 +10,7 @@ All notable changes to CloudShield. The format follows [Keep a Changelog](https:
 - **A typo in the policy file removed a safety check.** `allowed_namespacez` loaded without complaint, and an empty list meant no namespace restriction, so a quarantine outside the allowlist got as far as awaiting approval. The loader now refuses unknown settings and missing required ones, so a mistake stops startup.
 - **A proposal needing two approvals could get stuck.** If the first approval expired before the second arrived, its approver was refused a second decision. They can now give an expired approval again, and each person still holds one decision.
 - **A run interrupted by a crash stayed `executing` forever.** At startup, those runs now become `failed` with a clear reason and an escalation. They're never retried, because the action may or may not have been applied.
-- **The stale-target check had a gap.** It read the pod and then patched it by name, so a pod replaced in between would get the label. The patch now carries the pod's UID, which the API server enforces. The kind lab checks that a real API server refuses a wrong UID.
+- **The stale-target check had a gap.** It read the pod and then patched it by name, so a pod replaced in between would get the label. The patch is now a JSON Patch that tests the pod's UID on the server, in the same step as the change. The kind lab checks this on a real API server, which is how it caught my first attempt: a merge patch with `metadata.uid` was accepted with a wrong UID.
 - **A non-ASCII byte in a credential** returned a 500 instead of a 401 at the ingest routes and the responder. Nothing was ingested or executed, but it was the wrong answer.
 
 ## [0.6.0] - 2026-11-05

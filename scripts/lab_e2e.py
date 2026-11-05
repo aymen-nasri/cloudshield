@@ -146,13 +146,25 @@ def case_for(api: httpx.Client, pod_id: str, event_type: str, *, timeout: float)
 
 
 def uid_precondition_check(core: Any, pod: str) -> bool:
-    """The real API server must refuse a patch that names another pod's UID. Fakes can't show this."""
-    body = {"metadata": {"uid": "not-this-pod", "labels": {"cloudshield.io/uid-check": "x"}}}
-    try:
-        core.patch_namespaced_pod(pod, NS, body, dry_run="All")
-    except ApiException as exc:
-        return exc.status == 409
-    return False
+    """The real API server must refuse the responder's patch if the UID is wrong, and accept it if right.
+
+    Fakes can't show this. An earlier version put metadata.uid in a merge patch, and this check caught
+    the API server accepting a wrong one.
+    """
+
+    def patch(uid: str) -> int | None:
+        body = [
+            {"op": "test", "path": "/metadata/uid", "value": uid},
+            {"op": "add", "path": "/metadata/labels/cloudshield.io~1uid-check", "value": "x"},
+        ]
+        try:
+            core.patch_namespaced_pod(pod, NS, body, dry_run="All")
+        except ApiException as exc:
+            return exc.status
+        return None
+
+    real_uid = core.read_namespaced_pod(pod, NS).metadata.uid
+    return patch("not-this-pod") in (409, 422) and patch(real_uid) is None
 
 
 def admission_check(net: Any) -> tuple[bool, bool]:
@@ -526,7 +538,7 @@ def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, lis
         "",
         "patch",
         "a label patch naming another pod's UID",
-        "409 refused" if uid_refused else "ACCEPTED",
+        "refused" if uid_refused else "NOT REFUSED",
         uid_refused,
     )
 
