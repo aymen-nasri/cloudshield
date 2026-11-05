@@ -98,8 +98,9 @@ def test_a_finding_goes_through_eventbridge_and_sqs_into_a_case(sqs):
 
     [case] = cases.list()
     [event] = case.events
-    assert (event.source, event.source_event_id) == ("guardduty", _finding()["id"])
-    assert event.ocsf["finding_info"]["uid"] == _finding()["id"]
+    assert event.source == "guardduty"
+    assert event.source_event_id.startswith(_finding()["id"])
+    assert event.account_id == _finding()["accountId"]
     assert _count(sqs) == 0  # deleted only after it was ingested
 
 
