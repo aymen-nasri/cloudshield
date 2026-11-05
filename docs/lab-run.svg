@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="746" height="1141" viewBox="0 0 746 1141" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5">
-<rect width="746" height="1141" rx="8" fill="#0d1117"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="746" height="1426" viewBox="0 0 746 1426" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5">
+<rect width="746" height="1426" rx="8" fill="#0d1117"/>
 <circle cx="18" cy="16" r="5" fill="#ff5f56"/><circle cx="34" cy="16" r="5" fill="#ffbd2e"/><circle cx="50" cy="16" r="5" fill="#27c93f"/>
 <text x="728" y="20" fill="#6e7681" text-anchor="end">python scripts/lab_e2e.py</text>
 <text x="18" y="48" fill="#e6edf3" font-weight="bold" xml:space="preserve">CloudShield · scenario S1 on a real Kubernetes cluster (kind), from a live Falco detection</text>
@@ -7,12 +7,12 @@
 <text x="18" y="86" fill="#c9d1d9" xml:space="preserve"></text>
 <text x="18" y="105" fill="#c9d1d9" xml:space="preserve">1  cluster  3 nodes, Calico, shop app with 3 checkout pods    -&gt; ready</text>
 <text x="18" y="124" fill="#3fb950" xml:space="preserve">   deploy   CloudShield pod, from its Helm chart              -&gt; running</text>
-<text x="18" y="143" fill="#8b949e" xml:space="preserve">            cloudshield-core-5946fdc76f-c95kl as cloudshield-investigator, 0 restarts</text>
-<text x="18" y="162" fill="#8b949e" xml:space="preserve">            target checkout-b978689cd-4h5lp (192.168.232.133) on cloudshield-lab-worker2</text>
+<text x="18" y="143" fill="#8b949e" xml:space="preserve">            cloudshield-core-6c5bd9d9d-vq9gb as cloudshield-investigator, 0 restarts</text>
+<text x="18" y="162" fill="#8b949e" xml:space="preserve">            target checkout-b978689cd-7mc8d (192.168.232.129) on cloudshield-lab-worker2</text>
 <text x="18" y="181" fill="#3fb950" xml:space="preserve">   traffic  probe -&gt; both checkout pods on 8080               -&gt; reachable</text>
 <text x="18" y="200" fill="#c9d1d9" xml:space="preserve">2  attack   wget ... | sh in a debug container of the pod     -&gt; launched</text>
 <text x="18" y="219" fill="#8b949e" xml:space="preserve">            Falco (modern eBPF) -&gt; Falcosidekick -&gt; CloudShield Service, token-authenticated</text>
-<text x="18" y="238" fill="#c9d1d9" xml:space="preserve">3  case     9 event(s), severity critical                     -&gt; case_01M6P5W0MHGDCNA4RBJRKV6CWH</text>
+<text x="18" y="238" fill="#c9d1d9" xml:space="preserve">3  case     9 event(s), severity critical                     -&gt; case_01M6PC0V80P2WHY5RYP6TXSMAN</text>
 <text x="18" y="257" fill="#8b949e" xml:space="preserve">            Drop and execute new binary in container</text>
 <text x="18" y="276" fill="#8b949e" xml:space="preserve">            Remote Script Piped to Shell in Container</text>
 <text x="18" y="295" fill="#8b949e" xml:space="preserve">            Unexpected Process in Protected Workload</text>
@@ -56,7 +56,22 @@
 <text x="18" y="1017" fill="#8b949e" xml:space="preserve">            received keyless@projectsigstore.iam.gserviceaccount.com</text>
 <text x="18" y="1036" fill="#3fb950" xml:space="preserve">14 audit    25 hash-chained records                           -&gt; chain intact</text>
 <text x="18" y="1055" fill="#3fb950" xml:space="preserve">15 metrics  /metrics agrees with what just happened           -&gt; agrees</text>
-<text x="18" y="1074" fill="#8b949e" xml:space="preserve">            49 alerts accepted, 2 actions verified, 2 traffic probes passed</text>
-<text x="18" y="1093" fill="#c9d1d9" xml:space="preserve"></text>
-<text x="18" y="1112" fill="#3fb950" xml:space="preserve">all checks passed</text>
+<text x="18" y="1074" fill="#8b949e" xml:space="preserve">            31 alerts accepted, 2 actions verified, 2 traffic probes passed</text>
+<text x="18" y="1093" fill="#3fb950" xml:space="preserve">   identity API pod runs as the read-only investigator        -&gt; cloudshield-investigator</text>
+<text x="18" y="1112" fill="#3fb950" xml:space="preserve">   identity API pod mounts no Kubernetes token but its own    -&gt; cloudshield-responder-api</text>
+<text x="18" y="1131" fill="#3fb950" xml:space="preserve">   identity responder runs as a separate pod and identity     -&gt; cloudshield-responder</text>
+<text x="18" y="1150" fill="#3fb950" xml:space="preserve">   identity responder refuses a call with no token            -&gt; 401</text>
+<text x="18" y="1169" fill="#3fb950" xml:space="preserve">   identity responder refuses kube-system, even with the token-&gt; 403</text>
+<text x="18" y="1188" fill="#3fb950" xml:space="preserve">   identity responder refuses a non-allowlisted action        -&gt; 403</text>
+<text x="18" y="1207" fill="#3fb950" xml:space="preserve">   monitor  Prometheus scrapes /metrics with its login        -&gt; up = 1.0</text>
+<text x="18" y="1226" fill="#3fb950" xml:space="preserve">   monitor  Prometheus has the run&#x27;s verified actions         -&gt; 2.0</text>
+<text x="18" y="1245" fill="#3fb950" xml:space="preserve">   monitor  alert rules loaded, skipped checks included       -&gt; 5 rules</text>
+<text x="18" y="1264" fill="#3fb950" xml:space="preserve">   monitor  Grafana has the provisioned dashboard             -&gt; 1 found</text>
+<text x="18" y="1283" fill="#3fb950" xml:space="preserve">   monitor  Grafana reads the same numbers                    -&gt; 2.0</text>
+<text x="18" y="1302" fill="#3fb950" xml:space="preserve">   monitor  Grafana sees the traffic probes                   -&gt; 2.0</text>
+<text x="18" y="1321" fill="#3fb950" xml:space="preserve">16 restart  stop CloudShield&#x27;s process                        -&gt; 1 restart(s)</text>
+<text x="18" y="1340" fill="#3fb950" xml:space="preserve">   postgres case, actions and audit chain after the restart   -&gt; kept</text>
+<text x="18" y="1359" fill="#8b949e" xml:space="preserve">            9 events, 2 acts, 25 audit entries</text>
+<text x="18" y="1378" fill="#c9d1d9" xml:space="preserve"></text>
+<text x="18" y="1397" fill="#3fb950" xml:space="preserve">all checks passed</text>
 </svg>
