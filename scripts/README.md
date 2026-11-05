@@ -13,6 +13,7 @@ Back to the [project README](../README.md).
 | [`compose_check.sh`](compose_check.sh) | The README's `docker compose` setup, from `.env.example` through login to a restart that must keep the case | n/a | n/a | the `docker compose` job |
 | [`emulated_aws.sh`](emulated_aws.sh) | The lab's OpenTofu files applied to Moto, the real state machine on Step Functions Local, and the AWS paths tested on both | n/a | emulated | yes |
 | [`local_model_check.py`](local_model_check.py) | S1 and S8 investigated by a real model on Ollama. Fails only if a guarantee breaks, or if no answer ever reached the checks | n/a | none | yes |
+| [`sign_approval.py`](sign_approval.py) | Signs an approval on the approver's own machine, showing what's being approved and recomputing its hash | n/a | none | unit tests, and the kind lab signs the same way |
 | [`export_schemas.py`](export_schemas.py) | Writes the JSON Schemas in `schemas/` from the Pydantic contracts | n/a | n/a | the schema drift check |
 
 ```bash

@@ -27,6 +27,7 @@ spec:
           ports: [{ name: http, containerPort: 8081 }]
           env:
             - { name: CLOUDSHIELD_RESPONDER_API_TOKEN_FILE, value: /var/run/secrets/cloudshield/api/token }
+            - { name: CLOUDSHIELD_APPROVER_KEYS_FILE, value: /var/run/secrets/cloudshield/approvers/keys.json }
             {{- if .Values.trafficProbe.pod }}
             - { name: CLOUDSHIELD_PROBE_POD, value: {{ .Values.trafficProbe.pod | quote }} }
             - { name: CLOUDSHIELD_PROBE_TOKEN_FILE, value: /var/run/secrets/cloudshield/prober/token }
@@ -44,6 +45,7 @@ spec:
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
             - { name: api-token, mountPath: /var/run/secrets/cloudshield/api, readOnly: true }
+            - { name: approver-keys, mountPath: /var/run/secrets/cloudshield/approvers, readOnly: true }
             {{- if .Values.trafficProbe.pod }}
             - { name: prober-token, mountPath: /var/run/secrets/cloudshield/prober, readOnly: true }
             {{- end }}
@@ -51,6 +53,8 @@ spec:
         - { name: tmp, emptyDir: {} }
         - name: api-token
           secret: { secretName: {{ .Values.responder.apiTokenSecret }}, defaultMode: 0440 }
+        - name: approver-keys
+          secret: { secretName: {{ .Values.responder.approverKeysSecret }}, defaultMode: 0440 }
         {{- if .Values.trafficProbe.pod }}
         - name: prober-token
           secret: { secretName: {{ .Values.trafficProbe.tokenSecret }}, defaultMode: 0440 }
@@ -64,4 +68,21 @@ spec:
   selector: { app.kubernetes.io/name: cloudshield-responder }
   ports:
     - { name: http, port: 80, targetPort: http }
+---
+# Only the API pod may call the responder. The token and the signatures still apply: this just means
+# the rest of the cluster can't even try. Needs a CNI that enforces NetworkPolicy, as the kind lab's does.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudshield-responder
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: cloudshield-responder }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: cloudshield-core }
+      ports:
+        - { protocol: TCP, port: 8081 }
 {{- end }}

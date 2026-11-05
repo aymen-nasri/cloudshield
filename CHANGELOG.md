@@ -2,6 +2,16 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- **Signed approvals: a compromised API pod can no longer start an action.** Approvers sign with a private key only they hold, using `scripts/sign_approval.py`, and the responder checks the signatures itself against public keys only it holds. A signature only works for that exact proposal, requester and approver, and expires after 15 minutes. The number needed comes from the pod's live labels. See [ADR 0005](docs/adr/0005-signed-approvals.md). This replaces the biggest limit stated in earlier releases.
+- **Only the API pod can reach the responder.** A NetworkPolicy now enforces this, and the kind lab checks it from a pod in another namespace.
+
+### Changed
+- **Upgrading:** the responder won't start without `CLOUDSHIELD_APPROVER_KEYS_FILE`, and the API refuses an unsigned approval when it uses the responder. The analyst console can't approve in that setup, because the browser has no key.
+- `cryptography` is now a runtime dependency.
+
 ## [0.7.0] - 2026-11-05
 
 Fixes nine problems found by asking what happens when each step fails, and connects the app to its AWS paths. Nothing here has run on real AWS, EKS or Bedrock.
