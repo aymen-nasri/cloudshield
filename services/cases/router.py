@@ -1,4 +1,4 @@
-"""Read API for cases, timelines, the entity graph and audit records.
+"""Read API for cases, timelines, the entity graph and audit records. Every route needs an analyst.
 
 Handlers are plain `def`: FastAPI runs them in a worker thread, so blocking store calls
 (PostgreSQL) never stall the event loop.
@@ -7,16 +7,19 @@ Handlers are plain `def`: FastAPI runs them in a worker thread, so blocking stor
 from dataclasses import asdict
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from cases.audit import AuditStore, to_dict
 from cases.models import Case
 from cases.store import CaseStore
+from core.auth import AnalystDirectory, require_analyst
 from enrichment.graph import EntityStore
 
 
-def build_router(cases: CaseStore, audit: AuditStore, entities: EntityStore) -> APIRouter:
-    router = APIRouter(prefix="/v1", tags=["cases"])
+def build_router(
+    cases: CaseStore, audit: AuditStore, entities: EntityStore, analysts: AnalystDirectory
+) -> APIRouter:
+    router = APIRouter(prefix="/v1", tags=["cases"], dependencies=[Depends(require_analyst(analysts))])
 
     def _get(case_id: str) -> Case:
         case = cases.get(case_id)

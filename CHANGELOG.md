@@ -14,6 +14,9 @@ All notable changes to CloudShield. The format follows [Keep a Changelog](https:
 - With no AWS region, the IAM role and EC2 lookups are off rather than failing at startup. The Helm chart's default image is now the signed one on GHCR.
 
 ### Fixed
+- **Reads had no login.** `/v1/cases`, case details, timelines, the entity graph, `/v1/audit` and `/v1/health/coverage` answered anyone, including the attacker's command line in case details, while the docs listed required scopes that didn't exist. They now need an analyst, and a test sweeps every route in the API schema, so a new route can't be left open by accident.
+- A `viewer` could run a proposal's dry run and move it to awaiting approval. It now needs the `analyst` or `incident-responder` role.
+- The API table now says who can really call each route, and no longer lists `/v1/events`, which doesn't exist.
 - The image policy only checked images under CloudShield's own names, so an image under any other name went unchecked. It now matches every image in the `cloudshield` namespace.
 - The traffic probe could report a false pass. Quarantining a pod its peer was never allowed to reach failed to connect and counted as blocked. A block now counts only if the peer could connect just before the quarantine, and pods outside the probe's configured reach are skipped in both directions.
 

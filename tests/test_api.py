@@ -5,11 +5,13 @@ from datetime import timedelta
 from fastapi.testclient import TestClient
 
 from core.app import Settings, create_app
+from core.auth import AnalystDirectory, Principal
 from ingestion.auth import SIGNATURE_HEADER, SourceCredential, sign
 from tests.conftest import fixture_bytes
 
 TOKEN = "test-falco-token"
 SECRET = "test-replay-secret"
+READER = {"authorization": "Bearer reader"}
 
 
 def _client() -> TestClient:
@@ -21,6 +23,7 @@ def _client() -> TestClient:
             "guardduty": SourceCredential(hmac_secret=SECRET),
         },
         max_silence={"falco": timedelta(minutes=5), "wazuh": timedelta(minutes=5)},
+        analysts=AnalystDirectory.from_tokens({"reader": Principal("analyst:r", frozenset({"viewer"}))}),
     )
     return TestClient(create_app(settings))
 
@@ -52,12 +55,12 @@ def test_end_to_end_replay_builds_a_case_and_audit_trail():
     r2 = client.post("/v1/ingest/falco", content=falco, headers={"authorization": f"Bearer {TOKEN}"})
     assert (r1.status_code, r2.status_code) == (202, 202)
 
-    [case] = client.get("/v1/cases").json()
+    [case] = client.get("/v1/cases", headers=READER).json()
     assert case["event_count"] == 2
-    timeline = client.get(f"/v1/cases/{case['case_id']}/timeline").json()
+    timeline = client.get(f"/v1/cases/{case['case_id']}/timeline", headers=READER).json()
     assert [t["source"] for t in timeline] == ["falco", "guardduty"]
 
-    audit = client.get("/v1/audit", params={"case_id": case["case_id"]}).json()
+    audit = client.get("/v1/audit", params={"case_id": case["case_id"]}, headers=READER).json()
     assert audit["chain_intact"] is True
     assert len(audit["records"]) == 2
 
@@ -77,7 +80,7 @@ def test_t04_silent_sensor_is_reported_as_not_ok():
     body = fixture_bytes("s1_suspicious_process", "falco_alert.json")
     client.post("/v1/ingest/falco", content=body, headers={"authorization": f"Bearer {TOKEN}"})
 
-    coverage = client.get("/v1/health/coverage").json()
+    coverage = client.get("/v1/health/coverage", headers=READER).json()
     assert coverage["sources"]["falco"]["state"] == "ok"
     assert coverage["sources"]["wazuh"]["state"] == "unknown"  # never heard from: not "ok"
     assert coverage["overall"] == "degraded"
