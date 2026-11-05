@@ -22,3 +22,4 @@ kubeconfig*
 # Local evidence written by the dev stack, and eval run outputs
 .local-evidence/
 evals/results/
+moto.log

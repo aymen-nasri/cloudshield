@@ -21,6 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 aws = ["boto3>=1.35"]
+emulation = ["boto3>=1.35", "moto[server]>=5.1"]
 k8s = ["kubernetes>=31.0"]
 postgres = ["psycopg[binary,pool]>=3.2"]
 dev = [
