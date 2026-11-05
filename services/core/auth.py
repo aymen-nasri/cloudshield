@@ -10,8 +10,11 @@ configuration never holds a usable credential. TODO(M5): replace with OIDC SSO; 
 import hashlib
 import hmac
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import Annotated
+
+from fastapi import Header, HTTPException, status
 
 ROLES = frozenset({"viewer", "analyst", "incident-responder", "admin"})
 
@@ -27,6 +30,18 @@ class Principal:
 
 def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def require_analyst(analysts: "AnalystDirectory") -> Callable[..., "Principal"]:
+    """A FastAPI dependency: refuse the request unless it carries a known analyst's token."""
+
+    def dependency(authorization: Annotated[str | None, Header()] = None) -> Principal:
+        found = analysts.authenticate(authorization)
+        if found is None:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "analyst not authenticated")
+        return found
+
+    return dependency
 
 
 class AnalystDirectory:

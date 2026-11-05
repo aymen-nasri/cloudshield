@@ -1,8 +1,9 @@
 """HTTP ingestion endpoints."""
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 
+from core.auth import AnalystDirectory, require_analyst
 from ingestion.adapters import MAX_PAYLOAD_BYTES, PayloadError, SourceAdapter
 from ingestion.auth import SourceCredential, authenticate
 from ingestion.coverage import CoverageTracker
@@ -14,6 +15,7 @@ def build_router(
     adapters: dict[str, SourceAdapter],
     credentials: dict[str, SourceCredential],
     coverage: CoverageTracker,
+    analysts: AnalystDirectory,
 ) -> APIRouter:
     router = APIRouter(prefix="/v1", tags=["ingestion"])
 
@@ -38,7 +40,7 @@ def build_router(
         coverage.heartbeat(source)
         return {"status": result.status, "event_id": result.event_id, "dedup_key": result.dedup_key}
 
-    @router.get("/health/coverage")
+    @router.get("/health/coverage", dependencies=[Depends(require_analyst(analysts))])
     async def health_coverage() -> dict[str, object]:
         return {"overall": coverage.overall(), "sources": coverage.status()}
 

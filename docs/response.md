@@ -176,29 +176,28 @@ COVERAGE   Falco ● ok    GuardDuty ● ok    Wazuh ● degraded (no heartbeat 
 
 ## API surface
 
-| Method | Endpoint | Purpose | Required scope |
+| Method | Endpoint | Purpose | Who can call it |
 |---|---|---|---|
-| `POST` | `/v1/ingest/falco` | Falcosidekick webhook (bearer token) | `ingest:falco` |
-| `POST` | `/v1/ingest/wazuh` | Wazuh integration webhook (HMAC-SHA256 signed body) | `ingest:wazuh` |
+| `POST` | `/v1/ingest/falco` | Falcosidekick webhook (bearer token) | Producer with the bearer token |
+| `POST` | `/v1/ingest/wazuh` | Wazuh integration webhook (HMAC-SHA256 signed body) | Producer with the signing secret |
 | — | *worker* `aws-findings-consumer` | Consumes GuardDuty findings from SQS (🧩 not deployed) | IAM role |
-| `GET` | `/v1/cases` | List cases (filter by status, severity, entity) | `case:read` |
-| `GET` | `/v1/cases/{id}` | Case detail: entities, evidence, investigations, proposals | `case:read` |
-| `GET` | `/v1/cases/{id}/timeline` | Event-time-ordered timeline with sources | `case:read` |
-| `GET` | `/v1/events?q=` | Search normalized events | `event:read` |
-| `GET` | `/v1/entities/{id}/graph` | Relationship graph with assurance levels | `case:read` |
-| `POST` | `/v1/cases/{id}/investigations` | Run the AI investigator on the case's evidence and matching runbooks; stored only if every citation checks out | `ai:invoke` |
-| `GET` | `/v1/cases/{id}/investigations` | Investigations for a case, with model ID, prompt version and runbooks used | `case:read` |
-| `POST` | `/v1/investigations/{id}/review` | An analyst accepts or rejects an investigation, once | `ai:review` |
-| `GET` | `/v1/proposals/{id}` | Proposal, policy decision and impact preview | `case:read` |
-| `POST` | `/v1/proposals/{id}/dry-run` | Re-run the dry-run and the freshness check | `response:propose` |
-| `POST` | `/v1/proposals/{id}/approve` | Approve; the body must include the proposal hash | `response:approve` |
-| `POST` | `/v1/proposals/{id}/reject` | Reject with a justification | `response:approve` |
-| `POST` | `/v1/proposals/{id}/execute` | Re-checks approvals and the target, executes once, verifies | `response:execute` |
-| `GET` | `/v1/cases/{id}/proposals` | Proposals for a case, with policy decisions, approvals and execution results | `case:read` |
-| `GET` | `/v1/cases/{id}/report` | Post-incident report as Markdown, built only from recorded evidence, with attacker-supplied text escaped ([sample](sample-incident-report.md)) | `case:read` |
-| `GET` | `/v1/health/coverage` | Per-source heartbeat and coverage state | `ops:read` |
-| `GET` | `/v1/audit?case_id=` | Hash-chained audit records | `audit:read` |
+| `GET` | `/v1/cases` | List cases (filter by status, severity, entity) | Any analyst |
+| `GET` | `/v1/cases/{id}` | Case detail: entities, evidence, investigations, proposals | Any analyst |
+| `GET` | `/v1/cases/{id}/timeline` | Event-time-ordered timeline with sources | Any analyst |
+| `GET` | `/v1/entities/{id}/graph` | Relationship graph with assurance levels | Any analyst |
+| `POST` | `/v1/cases/{id}/investigations` | Run the AI investigator on the case's evidence and matching runbooks; stored only if every citation checks out | `analyst`, `incident-responder` |
+| `GET` | `/v1/cases/{id}/investigations` | Investigations for a case, with model ID, prompt version and runbooks used | Any analyst |
+| `POST` | `/v1/investigations/{id}/review` | An analyst accepts or rejects an investigation, once | `analyst`, `incident-responder` |
+| `GET` | `/v1/proposals/{id}` | Proposal, policy decision and impact preview | Any analyst |
+| `POST` | `/v1/proposals/{id}/dry-run` | Re-run the dry-run and the freshness check | `analyst`, `incident-responder` |
+| `POST` | `/v1/proposals/{id}/approve` | Approve; the body must include the proposal hash | The policy's approver role (`incident-responder`), never the requester |
+| `POST` | `/v1/proposals/{id}/reject` | Reject with a justification | The policy's approver role (`incident-responder`), never the requester |
+| `POST` | `/v1/proposals/{id}/execute` | Re-checks approvals and the target, executes once, verifies | `incident-responder` |
+| `GET` | `/v1/cases/{id}/proposals` | Proposals for a case, with policy decisions, approvals and execution results | Any analyst |
+| `GET` | `/v1/cases/{id}/report` | Post-incident report as Markdown, built only from recorded evidence, with attacker-supplied text escaped ([sample](sample-incident-report.md)) | Any analyst |
+| `GET` | `/v1/health/coverage` | Per-source heartbeat and coverage state | Any analyst |
+| `GET` | `/v1/audit?case_id=` | Hash-chained audit records | Any analyst |
 | `GET` | `/v1/me` | The signed-in analyst and roles | any analyst |
-| `GET` | `/console` | The analyst console (static page, strict CSP) | any analyst |
+| `GET` | `/console` | The analyst console (static page, strict CSP). The page itself is public; everything it shows needs an analyst | Anyone |
 
 Analysts use four roles: `viewer`, `analyst` (can propose), `incident-responder` (can propose, approve and execute) and `admin`. Nobody can approve their own proposal, approvals must quote the proposal hash they were shown, and execution re-checks both the approvals and the target. Today analysts authenticate with bearer tokens whose SHA-256 hashes are configured in `CLOUDSHIELD_ANALYSTS`; OIDC SSO replaces this later (M5).

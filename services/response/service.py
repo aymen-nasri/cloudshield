@@ -171,6 +171,8 @@ class ResponseService:
         return record
 
     def dry_run(self, proposal_id: str, principal: Principal) -> ProposalRecord:
+        if not principal.has_any(PROPOSERS):
+            raise Forbidden("a dry run needs the analyst or incident-responder role")
         with self._lock:
             record = self._record(proposal_id)
             self._require(record, S.PROPOSED)

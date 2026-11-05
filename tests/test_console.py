@@ -77,7 +77,7 @@ def test_console_demo_preloads_a_proposal_awaiting_approval():
 
     client = TestClient(app)
     bob = {"authorization": f"Bearer {demo.BOB}"}
-    s1 = next(c for c in client.get("/v1/cases").json() if c["event_count"] == 2)["case_id"]
+    s1 = next(c for c in client.get("/v1/cases", headers=bob).json() if c["event_count"] == 2)["case_id"]
     [proposal] = client.get(f"/v1/cases/{s1}/proposals", headers=bob).json()
     assert proposal["state"] == "awaiting_approval"
     assert (
