@@ -236,15 +236,15 @@ def metric_values(api: httpx.Client) -> dict[tuple[str, tuple[tuple[str, str], .
 
 
 @contextmanager
-def deployed_api() -> Iterator[httpx.Client]:
+def deployed_api(port: int = LOCAL_PORT) -> Iterator[httpx.Client]:
     """The API as it runs in the cluster, through a port-forward to its Service."""
     forward = subprocess.Popen(  # noqa: S603
-        ["kubectl", "-n", IMAGE_NS, "port-forward", f"svc/{SERVICE}", f"{LOCAL_PORT}:80"],  # noqa: S607
+        ["kubectl", "-n", IMAGE_NS, "port-forward", f"svc/{SERVICE}", f"{port}:80"],  # noqa: S607
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     reader = {"authorization": "Bearer alice-lab"}  # calls below that act as someone else say so
-    api = httpx.Client(base_url=f"http://127.0.0.1:{LOCAL_PORT}", headers=reader, timeout=30)
+    api = httpx.Client(base_url=f"http://127.0.0.1:{port}", headers=reader, timeout=30)
     try:
         for _ in range(30):
             try:
@@ -256,6 +256,32 @@ def deployed_api() -> Iterator[httpx.Client]:
     finally:
         api.close()
         forward.terminate()
+
+
+def core_pod(admin: Any) -> Any:
+    return admin.list_namespaced_pod(IMAGE_NS, label_selector=f"app.kubernetes.io/name={SERVICE}").items[0]
+
+
+def restarts(pod: Any) -> int:
+    return sum(c.restart_count for c in pod.status.container_statuses or [])
+
+
+def restart_process(admin: Any) -> int:
+    """Stop CloudShield's process and wait for Kubernetes to restart it. Returns the new restart count.
+
+    The same pod restarts its container, so no new pod needs admission: a pull request's image is
+    unsigned, and the image policy would refuse a new one.
+    """
+    before = restarts(core_pod(admin))
+    kill = "import os, signal; os.kill(1, signal.SIGTERM)"
+    kubectl("-n", IMAGE_NS, "exec", f"deploy/{SERVICE}", "--", "python", "-c", kill, check=False)
+    for _ in range(60):
+        pod = core_pod(admin)
+        ready = all(c.ready for c in pod.status.container_statuses or [])
+        if restarts(pod) > before and ready:
+            return restarts(pod)
+        time.sleep(2)
+    return before
 
 
 def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, list[str]]:
@@ -449,6 +475,37 @@ def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, lis
     )
     note(
         f"{accepted:.0f} alerts accepted, {verified:.0f} actions verified, {probes:.0f} traffic probes passed"
+    )
+
+    # Last, because it resets the in-process counters that the metrics check reads.
+    count = restart_process(admin)
+    restarted = count > 0
+    row(
+        "16",
+        "restart",
+        "stop CloudShield's process",
+        f"{count} restart(s)" if restarted else "NO RESTART",
+        restarted,
+    )
+    with deployed_api(LOCAL_PORT + 1) as fresh:
+        kept = fresh.get(f"/v1/cases/{case['case_id']}").json()
+        actions = fresh.get(f"/v1/cases/{case['case_id']}/proposals").json()
+        history = fresh.get("/v1/audit", params={"case_id": case["case_id"]}).json()
+    survived = (
+        kept.get("event_count", 0) >= case["event_count"]
+        and [p["state"] for p in actions] == ["verified", "verified"]
+        and history["chain_intact"]
+        and len(history["records"]) >= len(audit["records"])
+    )
+    row(
+        "",
+        "postgres",
+        "case, actions and audit chain after the restart",
+        "kept" if survived else "LOST",
+        survived,
+    )
+    note(
+        f"{kept.get('event_count', 0)} events, {len(actions)} actions, {len(history['records'])} audit records"
     )
     out.say("")
     verdict = f"{len(failures)} check(s) FAILED" if failures else "all checks passed"
