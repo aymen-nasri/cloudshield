@@ -6,6 +6,7 @@ from types import SimpleNamespace as NS
 from fastapi.testclient import TestClient
 
 from core.app import Settings, create_app
+from core.auth import AnalystDirectory, Principal
 from enrichment.context import PodContext, resolve_pod_context
 from enrichment.enricher import Enricher, pod_ref
 from enrichment.graph import InMemoryEntityStore
@@ -13,6 +14,7 @@ from ingestion.auth import SourceCredential
 from tests.conftest import NOW, fixture_bytes
 
 POD_UID = "8b0e3c52-1d7a-4f43-9e6b-3a2c5d9f0e17"
+READER = {"authorization": "Bearer reader"}
 ROLE = "arn:aws:iam::123456789012:role/shop-checkout-pod"
 
 
@@ -155,8 +157,9 @@ def test_graph_endpoint_serves_the_enriched_neighborhood():
         cluster="cs-lab-eks",
         account_id="123456789012",
         credentials={"falco": SourceCredential(token="t")},
+        analysts=AnalystDirectory.from_tokens({"reader": Principal("analyst:r", frozenset({"viewer"}))}),
     )
-    client = TestClient(create_app(settings, pod_resolver=lambda ns, pod: _ctx()))
+    client = TestClient(create_app(settings, pod_resolver=lambda ns, pod: _ctx()), headers=READER)
     body = fixture_bytes("s1_suspicious_process", "falco_alert.json")
     assert (
         client.post("/v1/ingest/falco", content=body, headers={"authorization": "Bearer t"}).status_code

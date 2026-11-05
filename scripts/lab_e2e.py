@@ -229,7 +229,8 @@ def deployed_api() -> Iterator[httpx.Client]:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    api = httpx.Client(base_url=f"http://127.0.0.1:{LOCAL_PORT}", timeout=30)
+    reader = {"authorization": "Bearer alice-lab"}  # calls below that act as someone else say so
+    api = httpx.Client(base_url=f"http://127.0.0.1:{LOCAL_PORT}", headers=reader, timeout=30)
     try:
         for _ in range(30):
             try:

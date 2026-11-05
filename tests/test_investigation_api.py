@@ -28,7 +28,7 @@ def _client(investigator: str | None = "offline") -> tuple[TestClient, str]:
     client = TestClient(create_app(settings))
     body = fixture_bytes("s1_suspicious_process", "falco_alert.json")
     client.post("/v1/ingest/falco", content=body, headers={"authorization": "Bearer falco-test"})
-    return client, client.get("/v1/cases").json()[0]["case_id"]
+    return client, client.get("/v1/cases", headers=ALICE).json()[0]["case_id"]
 
 
 def test_run_list_get_and_review_over_http():

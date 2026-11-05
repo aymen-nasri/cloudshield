@@ -430,8 +430,8 @@ make core-up         # core API (applies migrations) and PostgreSQL; OpenSearch 
 set -a; . ./.env; set +a
 make demo-incident   # replays GuardDuty + Falco out of order; both land in one case
 make console-demo    # or: the console on demo data at http://127.0.0.1:8090/console
-curl localhost:8080/v1/cases
-docker compose restart core && curl localhost:8080/v1/cases   # the case survives a restart
+curl -H "authorization: Bearer $CLOUDSHIELD_ANALYST_TOKEN" localhost:8080/v1/cases
+docker compose restart core && curl -H "authorization: Bearer $CLOUDSHIELD_ANALYST_TOKEN" localhost:8080/v1/cases   # the case survives a restart
 ```
 
 **Verify the published image** (public, no login needed; requires [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/)):

@@ -71,7 +71,7 @@ def preload(app) -> None:
         headers=falco,
     )
 
-    s1 = next(c for c in api.get("/v1/cases").json() if c["event_count"] == 2)["case_id"]
+    s1 = next(c for c in api.get("/v1/cases", headers=alice).json() if c["event_count"] == 2)["case_id"]
     api.post(f"/v1/cases/{s1}/investigations", headers=alice)
     body = {"action_type": "k8s.pod.quarantine_label", "rationale": "curl | sh from 198.51.100.23",
             "target": {"kind": "Pod", "name": POD, "uid": POD_UID, "namespace": "shop"}}  # fmt: skip
