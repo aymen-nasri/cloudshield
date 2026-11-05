@@ -6,10 +6,10 @@ Back to the [project README](../README.md). Status markers: ✅ built and tested
 
 | Folder | What it defines | Status | Checked by |
 |---|---|---|---|
-| [`kind/`](kind) | The three-node lab cluster (Calico instead of kindnet, so NetworkPolicies are enforced) the curl probe pod the verifier tests traffic from, and the script that builds and deploys CloudShield | ✅ | the `kind lab` CI job |
+| [`kind/`](kind) | The three-node lab cluster (Calico instead of kindnet, so NetworkPolicies are enforced) the curl probe pod the verifier tests traffic from, PostgreSQL, Prometheus and Grafana with a dashboard and alert rules, and the scripts that deploy them | ✅ | the `kind lab` CI job |
 | [`k8s/demo-shop/`](k8s/demo-shop) | The protected demo app: `checkout` and `cart` services in the `shop` namespace, Pod Security `restricted` | ✅ | kubeconform, the `kind lab` CI job |
 | [`policies/networkpolicies/`](policies/networkpolicies) | Default-deny plus allow-policies that each exclude `cloudshield.io/quarantine=true`, so one label quarantines a pod | ✅ traffic-tested | the `kind lab` CI job |
-| [`policies/rbac/`](policies/rbac) | Three identities with no overlap: a read-only investigator, a responder that may only patch pods in `shop`, and a prober that may only exec into the probe pod | ✅ refusals tested | the `kind lab` CI job |
+| [`policies/rbac/`](policies/rbac) | Three identities with no overlap, in two pods: the API runs as a read-only investigator; the responder pod runs as an identity that may only patch pods in `shop`, and holds a prober token that may only exec into the probe pod | ✅ refusals tested | the `kind lab` CI job |
 | [`policies/kyverno/`](policies/kyverno) | Admission rules: every allow-policy must keep the quarantine exclusion; only signed CloudShield images may run | ✅ both enforced in the lab | `kyverno test` in CI; the `kind lab` job checks a leaky policy and unsigned or wrongly signed images are rejected |
 | [`helm/`](helm) | The CloudShield chart, and the Falco values that load CloudShield's custom rules | ✅ | `helm lint`, kubeconform; the `kind lab` job installs both |
 | [`ansible/`](ansible) | Linux host hardening, Wazuh agent enrolment and the signed Wazuh → CloudShield integration | 🧩 | `ansible-playbook --syntax-check` |
@@ -22,7 +22,7 @@ The `shop` namespace runs a **default-deny** policy. Every allow-policy selects 
 ## Commands
 
 ```bash
-make lab-up       # kind + Calico + shop app + NetworkPolicies + RBAC + probe + Falco
+make lab-up       # kind + Calico + shop app + policies + RBAC + PostgreSQL + CloudShield + Prometheus + Grafana + Falco
 make lab-e2e      # scenario S1 against the cluster, with real traffic checks
 make lab-down
 make infra-check  # tofu validate, helm lint, kubeconform, kyverno test, Ansible syntax check

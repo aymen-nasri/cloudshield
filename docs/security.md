@@ -69,7 +69,7 @@ flowchart LR
     GHA["GitHub Actions"] -. "OIDC: short-lived credentials" .-> STS["AWS STS"]
 ```
 
-> **What runs today.** ✅ On every pull request: tests with a PostgreSQL service, ruff, mypy, Gitleaks, infrastructure validation, the Docker build, the Trivy scan, an SBOM, dependency review, and scenario S1 on a three-node kind cluster with Falco, Kyverno admission (network rules and image signatures), real traffic checks, and `/metrics` compared with what the run did. Dependabot opens weekly update pull requests for Python packages, GitHub Actions and the base image. ✅ On every push to `main`, the image is pushed to GHCR, signed keylessly with Cosign, given a signed SBOM attestation, and both are verified against the workflow's identity. A separate job then starts that signed image on a cluster with image verification enforced from the beginning, and checks that an unsigned image is refused. 🧩 The ECR push is written but skips until an AWS role is configured. 📐 Branch protection, the Argo CD deploy and smoke tests are designed.
+> **What runs today.** ✅ On every pull request: tests with a PostgreSQL service, ruff, mypy, Gitleaks, infrastructure validation, the Docker build, the Trivy scan, an SBOM, dependency review, and scenario S1 on a three-node kind cluster with Falco, Kyverno admission (network rules and image signatures), real traffic checks, numbers from the run read back through Prometheus and Grafana, and a restart that must keep the data in PostgreSQL. A separate job runs the README's `docker compose` setup, login included. Dependabot opens weekly update pull requests for Python packages, GitHub Actions and the base image. ✅ On every push to `main`, the image is pushed to GHCR, signed keylessly with Cosign, given a signed SBOM attestation, and both are verified against the workflow's identity. A separate job then starts that signed image on a cluster with image verification enforced from the beginning, and checks that an unsigned image is refused. 🧩 The ECR push is written but skips until an AWS role is configured. 📐 Branch protection, the Argo CD deploy and smoke tests are designed.
 
 ### DevOps tooling
 
@@ -82,7 +82,7 @@ flowchart LR
 | **Docker** | Packages the Python services | Predictable CI-built artifacts | ✅ |
 | **Amazon ECR** | Versioned image registry | The only deploy source | 🧩 |
 | **Argo CD** | GitOps reconciliation for Kubernetes | Only approved manifests reach the cluster [[R14]](references.md#references) | 📐 |
-| **Prometheus / Grafana** | CloudShield health and latency | Operational metrics, separate from threat alerts | ✅ `/metrics` endpoint · 📐 Prometheus server, Grafana |
+| **Prometheus / Grafana** | CloudShield health and latency | Operational metrics, separate from threat alerts | ✅ `/metrics`, Prometheus with alert rules, and a Grafana dashboard in the kind lab · 📐 Alertmanager |
 
 ### DevSecOps controls: protecting the protector
 
