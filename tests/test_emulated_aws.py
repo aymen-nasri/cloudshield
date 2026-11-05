@@ -37,7 +37,11 @@ def _client(service: str):
 def sqs():
     client = _client("sqs")
     for name in ("cloudshield-lab-findings", "cloudshield-lab-findings-dlq"):
-        client.purge_queue(QueueUrl=client.get_queue_url(QueueName=name)["QueueUrl"])
+        url = client.get_queue_url(QueueName=name)["QueueUrl"]
+        # Not purge_queue: like AWS, the emulator allows one purge per queue every 60 seconds.
+        while messages := client.receive_message(QueueUrl=url, MaxNumberOfMessages=10).get("Messages"):
+            for message in messages:
+                client.delete_message(QueueUrl=url, ReceiptHandle=message["ReceiptHandle"])
     return client
 
 
@@ -142,7 +146,8 @@ def test_tofu_configured_the_evidence_bucket(evidence_bucket):
     assert s3.get_bucket_versioning(Bucket=evidence_bucket)["Status"] == "Enabled"
     lock = s3.get_object_lock_configuration(Bucket=evidence_bucket)["ObjectLockConfiguration"]
     assert lock["ObjectLockEnabled"] == "Enabled"
-    assert lock["Rule"]["DefaultRetention"] == {"Mode": "GOVERNANCE", "Days": 7}
+    retention = lock["Rule"]["DefaultRetention"]
+    assert (retention["Mode"], retention["Days"]) == ("GOVERNANCE", 7)
     rule = s3.get_bucket_encryption(Bucket=evidence_bucket)["ServerSideEncryptionConfiguration"]["Rules"][0]
     assert rule["ApplyServerSideEncryptionByDefault"]["SSEAlgorithm"] == "aws:kms"
     block = s3.get_public_access_block(Bucket=evidence_bucket)["PublicAccessBlockConfiguration"]
