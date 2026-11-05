@@ -2,7 +2,7 @@
 
 The response state machine, policy gate, approvals, console and API. Part of the [CloudShield documentation](../README.md#documentation).
 
-Status markers: ✅ built and tested · 🧩 written as code, not deployed · 📐 designed only.
+Status markers: ✅ built and tested · 🧩 written as code, not deployed · 📐 designed only · 🔬 run on an emulator or a stand-in, not on real AWS.
 
 ## Human-approved response
 
