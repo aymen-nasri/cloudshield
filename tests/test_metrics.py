@@ -122,10 +122,10 @@ def test_a_verified_action_and_its_checks_are_counted():
 
 def test_a_failed_execution_is_counted_as_failed():
     class Broken(FakePodApi):
-        def patch_pod_labels(self, namespace, name, labels, *, dry_run):
+        def patch_pod_labels(self, namespace, name, labels, *, uid, dry_run):
             if not dry_run:
                 raise RuntimeError("API server unavailable")
-            super().patch_pod_labels(namespace, name, labels, dry_run=dry_run)
+            super().patch_pod_labels(namespace, name, labels, uid=uid, dry_run=dry_run)
 
     client = _client(Broken(name=TARGET["name"], uid=POD_UID))
     assert _quarantine(client)["state"] == "failed"

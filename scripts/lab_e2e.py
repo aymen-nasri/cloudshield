@@ -145,6 +145,16 @@ def case_for(api: httpx.Client, pod_id: str, event_type: str, *, timeout: float)
         time.sleep(2)
 
 
+def uid_precondition_check(core: Any, pod: str) -> bool:
+    """The real API server must refuse a patch that names another pod's UID. Fakes can't show this."""
+    body = {"metadata": {"uid": "not-this-pod", "labels": {"cloudshield.io/uid-check": "x"}}}
+    try:
+        core.patch_namespaced_pod(pod, NS, body, dry_run="All")
+    except ApiException as exc:
+        return exc.status == 409
+    return False
+
+
 def admission_check(net: Any) -> tuple[bool, bool]:
     """Ask the API server to admit two allow-policies (dry run): Kyverno must reject the leaky one.
 
@@ -511,6 +521,14 @@ def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, lis
         f"{sum(checks.values())}/{len(checks)} refused", all(checks.values()))  # fmt: skip
     for name, refused in checks.items():
         note(f"{name:<34} {'denied' if refused else 'ALLOWED'}")
+    uid_refused = uid_precondition_check(admin, target.metadata.name)
+    row(
+        "",
+        "patch",
+        "a label patch naming another pod's UID",
+        "409 refused" if uid_refused else "ACCEPTED",
+        uid_refused,
+    )
 
     if admission:
         leaky, guarded = admission_check(client.NetworkingV1Api())
