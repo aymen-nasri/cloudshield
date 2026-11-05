@@ -296,7 +296,7 @@ def create_app(
         yield
         stores.close()
 
-    app = FastAPI(title="CloudShield", version="0.5.0", lifespan=lifespan)
+    app = FastAPI(title="CloudShield", version="0.6.0", lifespan=lifespan)
     app.include_router(
         build_ingestion_router(pipeline, adapters, settings.credentials, coverage, settings.analysts, metrics)
     )
