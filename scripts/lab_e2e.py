@@ -17,8 +17,10 @@ Exits non-zero if any check fails, so CI can run it on every pull request.
 import argparse
 import base64
 import copy
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import textwrap
@@ -36,11 +38,14 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import httpx  # noqa: E402
 import yaml  # noqa: E402
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
 from kubernetes import client, config  # noqa: E402
 from kubernetes.client.exceptions import ApiException  # noqa: E402
 from prometheus_client.parser import text_string_to_metric_families  # noqa: E402
 
+from common.models import ResponseProposal  # noqa: E402
 from demo import Transcript, to_svg  # noqa: E402
+from policy.signing import sign_approval  # noqa: E402
 
 FIXTURE = ROOT / "detections" / "fixtures" / "s1_suspicious_process" / "falco_alert.json"
 LEAKY = (
@@ -143,6 +148,30 @@ def case_for(api: httpx.Client, pod_id: str, event_type: str, *, timeout: float)
         if time.monotonic() > deadline:
             return None
         time.sleep(2)
+
+
+def signed(view: dict[str, Any]) -> dict[str, str]:
+    """Bob's signature on this proposal, as scripts/sign_approval.py makes it on his own machine."""
+    key = Ed25519PrivateKey.from_private_bytes(hashlib.sha256(b"bob-lab-approval").digest())
+    signed_at = datetime.now(UTC)
+    proposal = ResponseProposal.model_validate(view)
+    return {
+        "signed_at": signed_at.isoformat(),
+        "signature": sign_approval(key, proposal, "analyst:bob", signed_at),
+    }
+
+
+def cluster_can_reach(url: str) -> str:
+    """The HTTP status a pod in another namespace gets, or 000 if it can't connect."""
+    done = kubectl(
+        "run", f"reach-check-{time.monotonic_ns()}", "-n", "default",
+        "--rm", "-i", "--restart=Never", "--quiet",
+        "--image=curlimages/curl:8.11.1", "--command", "--",
+        "curl", "-s", "-m", "5", "-o", "/dev/null", "-w", "status=%{http_code}", url,
+        check=False,
+    )  # fmt: skip
+    found = re.search(r"status=(\d+)", done.stdout)
+    return found.group(1) if found else "000"
 
 
 def uid_precondition_check(core: Any, pod: str) -> bool:
@@ -358,11 +387,37 @@ def identity_checks(admin: Any) -> list[tuple[str, str, bool]]:
         "created_at": datetime.now(UTC).isoformat(), "dry_run_passed": True,
     }  # fmt: skip
     deleting = {**proposal, "action_type": "k8s.pod.delete"}
+    shop_pod = admin.list_namespaced_pod(NS, label_selector="app=checkout").items[0]
+    allowed = {
+        **proposal,
+        "target": {
+            "kind": "Pod",
+            "name": shop_pod.metadata.name,
+            "uid": shop_pod.metadata.uid,
+            "namespace": NS,
+        },
+    }
+    forged = {
+        "approver": "analyst:bob",
+        "signed_at": datetime.now(UTC).isoformat(),
+        "signature": base64.b64encode(b"x" * 64).decode(),
+    }
     with forwarded(IMAGE_NS, RESPONDER, LOCAL_PORT + 2, 80, "/healthz") as responder:
         path, auth = "/v1/responder/execute", {"authorization": f"Bearer {token}"}
-        no_token = responder.post(path, json=proposal).status_code
-        kube_system = responder.post(path, json=proposal, headers=auth).status_code
-        not_allowlisted = responder.post(path, json=deleting, headers=auth).status_code
+
+        def call(body: dict[str, Any], approvals: tuple[dict[str, str], ...] = ()) -> int:
+            sent = {"proposal": body, "approvals": list(approvals)}
+            return responder.post(path, json=sent, headers=auth).status_code
+
+        no_token = responder.post(path, json={"proposal": proposal}).status_code
+        kube_system = call(proposal)
+        not_allowlisted = call(deleting)
+        unsigned = call(allowed)
+        forged_signature = call(allowed, (forged,))
+    labels = admin.read_namespaced_pod(shop_pod.metadata.name, NS).metadata.labels or {}
+    still_clean = "cloudshield.io/quarantine" not in labels
+    api_reachable = cluster_can_reach(f"http://{SERVICE}.{IMAGE_NS}/healthz")
+    responder_reachable = cluster_can_reach(f"http://{RESPONDER}.{IMAGE_NS}/healthz")
     return [
         ("API pod runs as the read-only investigator", api_pod.spec.service_account_name,
          api_pod.spec.service_account_name == "cloudshield-investigator"),
@@ -373,6 +428,11 @@ def identity_checks(admin: Any) -> list[tuple[str, str, bool]]:
         ("responder refuses a call with no token", f"{no_token}", no_token == 401),
         ("responder refuses kube-system, even with the token", f"{kube_system}", kube_system == 403),
         ("responder refuses a non-allowlisted action", f"{not_allowlisted}", not_allowlisted == 403),
+        ("stolen token, allowlisted pod, no signature", f"{unsigned}", unsigned == 403),
+        ("stolen token, allowlisted pod, forged signature", f"{forged_signature}", forged_signature == 403),
+        ("that pod was not labelled", "unchanged" if still_clean else "LABELLED", still_clean),
+        ("a pod elsewhere in the cluster reaches the API", api_reachable, api_reachable == "200"),
+        ("the same pod can't reach the responder", responder_reachable, responder_reachable == "000"),
     ]  # fmt: skip
 
 
@@ -493,7 +553,11 @@ def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, lis
         "checkout-allow" in lost)  # fmt: skip
     note(f"impact: pod keeps running, loses {', '.join(lost)}")
 
-    decision = {"justification": "confirmed remote script execution", "proposal_hash": p["proposal_hash"]}
+    decision = {
+        "justification": "confirmed remote script execution",
+        "proposal_hash": p["proposal_hash"],
+        **signed(p),
+    }
     p = api.post(f"/v1/proposals/{p['proposal_id']}/approve", json=decision, headers=bob).json()
     row("7", "approve", "bob, incident responder", p["state"])
     x = api.post(f"/v1/proposals/{p['proposal_id']}/execute", headers=bob).json()
@@ -516,7 +580,7 @@ def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, lis
     body = {**body, "action_type": "k8s.pod.remove_quarantine_label", "rationale": "rollback after review"}
     p = api.post(f"/v1/cases/{case['case_id']}/proposals", json=body, headers=alice).json()
     p = api.post(f"/v1/proposals/{p['proposal_id']}/dry-run", headers=bob).json()
-    decision = {"justification": "evidence collected", "proposal_hash": p["proposal_hash"]}
+    decision = {"justification": "evidence collected", "proposal_hash": p["proposal_hash"], **signed(p)}
     p = api.post(f"/v1/proposals/{p['proposal_id']}/approve", json=decision, headers=bob).json()
     x = api.post(f"/v1/proposals/{p['proposal_id']}/execute", headers=bob).json()
     released = x["state"] == "verified" and x["execution"]["checks"].get("traffic_probe") is True
