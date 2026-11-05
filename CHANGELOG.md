@@ -2,7 +2,11 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.4.0] - 2026-11-05
+
+**Security fix: upgrade from 0.3.0 and earlier.** Those versions let anyone read cases, timelines and the audit log with no login. See Fixed.
+
+CloudShield now runs as a pod in the kind lab, and the cluster only admits images this repository's CI signed. It has not yet run on EKS, a real AWS account or Bedrock.
 
 ### Added
 - The traffic probe can be turned on through settings (`CLOUDSHIELD_PROBE_POD`, `CLOUDSHIELD_PROBE_TOKEN_FILE`, `CLOUDSHIELD_PROBE_TARGET_SELECTOR`). Half a configuration fails at startup. The kind lab uses these settings and fails if the probe was skipped.
@@ -89,6 +93,7 @@ code and in CI. It has not yet run on a real cluster or AWS account (see the REA
   Trivy image scan and SBOM, and infrastructure validation (tofu validate, helm lint, kubeconform,
   kyverno test, Ansible syntax check).
 
+[0.4.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.4.0
 [0.3.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.3.0
 [0.2.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.2.0
 [0.1.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.1.0
