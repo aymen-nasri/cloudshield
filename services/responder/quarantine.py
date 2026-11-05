@@ -268,7 +268,7 @@ class KubernetesPodApi:
         try:
             return self._serialize(self._core.read_namespaced_pod(name, namespace))
         except ApiException as exc:
-            if exc.status == 404:
+            if exc.status in (403, 404):  # a pod this identity can't see isn't a target it can act on
                 return None
             raise
 

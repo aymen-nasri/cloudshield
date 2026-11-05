@@ -37,7 +37,8 @@ from investigator.workflow import InvestigationService
 from policy.engine import load_policies
 from reporting.router import build_router as build_report_router
 from responder.executor import Executor, KubernetesExecutor
-from responder.quarantine import ExecTrafficProbe, TrafficProbe, api_client_from_token_file
+from responder.quarantine import ExecTrafficProbe, TrafficProbe
+from responder.remote import RemoteExecutor
 from response.records import InMemoryProposalStore, ProposalStore
 from response.router import build_router as build_response_router
 from response.service import ResponseService
@@ -63,10 +64,11 @@ class Settings:
     database_schema: str | None = None
     # "k8s" resolves pod context from the Kubernetes API and AWS. Unset means no enrichment.
     enrichment: str | None = None
-    # "k8s" runs approved actions in-process with the responder identity (lab). Unset: none.
+    # "remote" asks the responder service to act, so this process holds no write access.
+    # "k8s" acts in-process with this process's own identity. Unset: no executor.
     executor: str | None = None
-    # The cloudshield-responder token. Unset: the executor uses this process's own identity.
-    responder_token_file: Path | None = None
+    responder_url: str | None = None
+    responder_api_token_file: Path | None = None
     # Verify quarantines with real traffic. All three together or none: "namespace/pod" of the peer,
     # the mounted cloudshield-prober token, and "key=value,..." labels of the pods it may reach.
     probe_pod: str | None = None
@@ -99,7 +101,7 @@ class Settings:
             credentials["guardduty"] = SourceCredential(hmac_secret=secret)
         evidence_dir = os.getenv("CLOUDSHIELD_EVIDENCE_DIR")
         probe_token_file = os.getenv("CLOUDSHIELD_PROBE_TOKEN_FILE")
-        responder_token_file = os.getenv("CLOUDSHIELD_RESPONDER_TOKEN_FILE")
+        responder_token_file = os.getenv("CLOUDSHIELD_RESPONDER_API_TOKEN_FILE")
         return cls(
             cluster=os.getenv("CLOUDSHIELD_CLUSTER"),
             account_id=os.getenv("CLOUDSHIELD_ACCOUNT_ID"),
@@ -108,7 +110,8 @@ class Settings:
             database_url=os.getenv("CLOUDSHIELD_DATABASE_URL"),
             enrichment=os.getenv("CLOUDSHIELD_ENRICHMENT"),
             executor=os.getenv("CLOUDSHIELD_EXECUTOR"),
-            responder_token_file=Path(responder_token_file) if responder_token_file else None,
+            responder_url=os.getenv("CLOUDSHIELD_RESPONDER_URL"),
+            responder_api_token_file=Path(responder_token_file) if responder_token_file else None,
             probe_pod=os.getenv("CLOUDSHIELD_PROBE_POD"),
             probe_token_file=Path(probe_token_file) if probe_token_file else None,
             probe_target_selector=os.getenv("CLOUDSHIELD_PROBE_TARGET_SELECTOR"),
@@ -219,9 +222,15 @@ def create_app(
     if executor is None and settings.executor == "k8s":
         from responder.quarantine import KubernetesPodApi
 
-        token_file = settings.responder_token_file
-        pods = KubernetesPodApi(api_client_from_token_file(token_file) if token_file else None)
-        executor = KubernetesExecutor(pods, probe=build_traffic_probe(settings))
+        executor = KubernetesExecutor(KubernetesPodApi(), probe=build_traffic_probe(settings))
+    if executor is None and settings.executor == "remote":
+        if not (settings.responder_url and settings.responder_api_token_file):
+            raise ValueError(
+                "CLOUDSHIELD_EXECUTOR=remote needs CLOUDSHIELD_RESPONDER_URL "
+                "and CLOUDSHIELD_RESPONDER_API_TOKEN_FILE"
+            )
+        token = settings.responder_api_token_file.read_text(encoding="utf-8").strip()
+        executor = RemoteExecutor.connect(settings.responder_url, token)
     response = ResponseService(
         stores.proposals,
         stores.cases,

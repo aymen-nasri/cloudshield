@@ -7,8 +7,9 @@ image:
 
 cluster: kind-cloudshield-lab
 
-executor: k8s
-responderTokenSecret: cloudshield-responder-token
+responder:
+  enabled: true
+  apiTokenSecret: cloudshield-responder-api
 
 trafficProbe:
   pod: shop/probe

@@ -26,14 +26,10 @@ spec:
             - { name: CLOUDSHIELD_CLUSTER, value: {{ .Values.cluster | quote }} }
             - { name: CLOUDSHIELD_ACCOUNT_ID, value: {{ .Values.accountId | quote }} }
             - { name: CLOUDSHIELD_ENRICHMENT, value: {{ .Values.enrichment | quote }} }
-            {{- if .Values.executor }}
-            - { name: CLOUDSHIELD_EXECUTOR, value: {{ .Values.executor | quote }} }
-            - { name: CLOUDSHIELD_RESPONDER_TOKEN_FILE, value: /var/run/secrets/cloudshield/responder/token }
-            {{- end }}
-            {{- if .Values.trafficProbe.pod }}
-            - { name: CLOUDSHIELD_PROBE_POD, value: {{ .Values.trafficProbe.pod | quote }} }
-            - { name: CLOUDSHIELD_PROBE_TOKEN_FILE, value: /var/run/secrets/cloudshield/prober/token }
-            - { name: CLOUDSHIELD_PROBE_TARGET_SELECTOR, value: {{ .Values.trafficProbe.targetSelector | quote }} }
+            {{- if .Values.responder.enabled }}
+            - { name: CLOUDSHIELD_EXECUTOR, value: remote }
+            - { name: CLOUDSHIELD_RESPONDER_URL, value: "http://cloudshield-responder" }
+            - { name: CLOUDSHIELD_RESPONDER_API_TOKEN_FILE, value: /var/run/secrets/cloudshield/api/token }
             {{- end }}
           envFrom:
             - secretRef: { name: {{ .Values.credentialsSecret }} }
@@ -48,21 +44,14 @@ spec:
             capabilities: { drop: [ALL] }
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
-            {{- if .Values.executor }}
-            - { name: responder-token, mountPath: /var/run/secrets/cloudshield/responder, readOnly: true }
-            {{- end }}
-            {{- if .Values.trafficProbe.pod }}
-            - { name: prober-token, mountPath: /var/run/secrets/cloudshield/prober, readOnly: true }
+            {{- if .Values.responder.enabled }}
+            - { name: api-token, mountPath: /var/run/secrets/cloudshield/api, readOnly: true }
             {{- end }}
       volumes:
         - { name: tmp, emptyDir: {} }
-        {{- if .Values.executor }}
-        - name: responder-token
-          secret: { secretName: {{ .Values.responderTokenSecret }}, defaultMode: 0440 }
-        {{- end }}
-        {{- if .Values.trafficProbe.pod }}
-        - name: prober-token
-          secret: { secretName: {{ .Values.trafficProbe.tokenSecret }}, defaultMode: 0440 }
+        {{- if .Values.responder.enabled }}
+        - name: api-token
+          secret: { secretName: {{ .Values.responder.apiTokenSecret }}, defaultMode: 0440 }
         {{- end }}
 ---
 apiVersion: v1

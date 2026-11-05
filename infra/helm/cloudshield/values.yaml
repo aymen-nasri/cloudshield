@@ -18,11 +18,12 @@ enrichment: k8s
 
 serviceAccountName: cloudshield-investigator
 
-# "k8s" runs approved actions in-process as the identity in responderTokenSecret. Empty: no executor.
-executor: ""
-responderTokenSecret: ""
+# Runs the responder as its own pod and has the API call it. Disabled: the API can't act at all.
+responder:
+  enabled: false
+  apiTokenSecret: "" # a Secret with a `token` key, shared by the API and the responder
 
-# Verifies quarantines with real traffic. Set all three, or leave them empty to skip the check.
+# The responder's check that a quarantine blocks real traffic. Set all three, or leave them empty to skip it.
 trafficProbe:
   pod: "" # namespace/pod of a peer the NetworkPolicies allow
   tokenSecret: "" # the cloudshield-prober token
