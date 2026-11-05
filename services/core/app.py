@@ -252,6 +252,7 @@ def create_app(
         environment=settings.environment,
         on_finished=metrics.observe_response,
     )
+    response.recover_interrupted()
     investigations = InvestigationService(
         stores.investigations,
         stores.cases,

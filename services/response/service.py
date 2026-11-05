@@ -244,11 +244,22 @@ class ResponseService:
                 decided_at=self.clock(),
                 justification=justification,
             )
+            # An expired approval counts for nothing, so its approver may give it again. Without this,
+            # a proposal needing two approvals sticks if the first expires before the second arrives.
+            renewing = any(
+                a.approver == principal.id
+                and a.decision == "approve"
+                and approval.decided_at > a.decided_at + policy.approval_ttl
+                for a in record.approvals
+            )
             try:
-                self.proposals.add_approval(approval)
+                if renewing:
+                    self.proposals.renew_approval(approval)
+                else:
+                    self.proposals.add_approval(approval)
             except DuplicateApproval as exc:
                 raise Conflict("you already decided on this proposal") from exc
-            record.approvals.append(approval)
+            record.approvals = [a for a in record.approvals if a.approver != principal.id] + [approval]
             self.audit.append(
                 "human",
                 principal.id,
@@ -259,6 +270,7 @@ class ResponseService:
                     "proposal_id": proposal_id,
                     "bound_hash": bound_hash,
                     "justification": justification,
+                    **({"renewed": True} if renewing else {}),
                 },
             )
 
@@ -334,6 +346,29 @@ class ResponseService:
             )
             self._finished(record)
             return record
+
+    def recover_interrupted(self) -> list[str]:
+        """Run once at startup. With one replica, anything still executing belongs to a process that died.
+
+        The action may or may not have been applied, so this reports that and stops. It never retries:
+        a person checks the target and starts a new proposal, which is safe because the label is idempotent.
+        """
+        problem = "the process stopped during this action; it may or may not have been applied"
+        recovered = []
+        with self._lock:
+            for record in self.proposals.in_state(S.EXECUTING):
+                if record.execution is not None:
+                    record.execution = replace(
+                        record.execution,
+                        status="interrupted",
+                        result={"error": problem},
+                        finished_at=self.clock(),
+                    )
+                    self.proposals.finish_execution(record.proposal.proposal_id, record.execution)
+                self._move(record, S.FAILED, "response-service", error=problem, escalate="on-call")
+                self._finished(record)
+                recovered.append(record.proposal.proposal_id)
+        return recovered
 
     def get(self, proposal_id: str) -> ProposalRecord:
         return self._record(proposal_id)
