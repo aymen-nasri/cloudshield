@@ -197,6 +197,7 @@ COVERAGE   Falco ● ok    GuardDuty ● ok    Wazuh ● degraded (no heartbeat 
 | `GET` | `/v1/cases/{id}/report` | Post-incident report as Markdown, built only from recorded evidence, with attacker-supplied text escaped ([sample](sample-incident-report.md)) | Any analyst |
 | `GET` | `/v1/health/coverage` | Per-source heartbeat and coverage state | Any analyst |
 | `GET` | `/v1/audit?case_id=` | Hash-chained audit records | Any analyst |
+| `GET` | `/metrics` | Prometheus metrics: alerts, ingest lag, source coverage, response outcomes, verification checks | Any analyst |
 | `GET` | `/v1/me` | The signed-in analyst and roles | any analyst |
 | `GET` | `/console` | The analyst console (static page, strict CSP). The page itself is public; everything it shows needs an analyst | Anyone |
 
