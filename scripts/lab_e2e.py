@@ -504,9 +504,7 @@ def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, lis
         "kept" if survived else "LOST",
         survived,
     )
-    note(
-        f"{kept.get('event_count', 0)} events, {len(actions)} actions, {len(history['records'])} audit records"
-    )
+    note(f"{kept.get('event_count', 0)} events, {len(actions)} acts, {len(history['records'])} audit entries")
     out.say("")
     verdict = f"{len(failures)} check(s) FAILED" if failures else "all checks passed"
     out.say(verdict, "bad" if failures else "good")
