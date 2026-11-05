@@ -8,7 +8,8 @@ services:
       CLOUDSHIELD_CLUSTER: cs-lab-eks
       CLOUDSHIELD_ACCOUNT_ID: "123456789012"
       CLOUDSHIELD_EVIDENCE_DIR: /evidence
-      # Deterministic baseline, no LLM. Set to "bedrock" + CLOUDSHIELD_BEDROCK_MODEL_ID for Bedrock.
+      # Deterministic baseline, no LLM. Or "ollama" + CLOUDSHIELD_OLLAMA_MODEL + CLOUDSHIELD_OLLAMA_URL for a
+      # local model, or "bedrock" + CLOUDSHIELD_BEDROCK_MODEL_ID for Bedrock.
       CLOUDSHIELD_INVESTIGATOR: offline
       CLOUDSHIELD_ANALYSTS: ${CLOUDSHIELD_ANALYSTS:-}
       CLOUDSHIELD_FALCO_TOKEN: ${CLOUDSHIELD_FALCO_TOKEN:?set in .env}

@@ -96,7 +96,9 @@ class GuardDutyAdapter:
         severity = _severity(float(detail["severity"]))
 
         if workload.get("name") and namespace:
-            resource_id = f"k8s:{workload.get('type', 'workload')}/{namespace}/{workload['name']}"
+            # GuardDuty says "pods"; Falco's alerts and everything downstream say "pod". One pod, one entity.
+            kind = str(workload.get("type") or "workload").lower().removesuffix("s")
+            resource_id = f"k8s:{kind}/{namespace}/{workload['name']}"
         elif instance_id:
             resource_id = f"aws:ec2/{instance_id}"
         elif arn and ":role/" in arn:

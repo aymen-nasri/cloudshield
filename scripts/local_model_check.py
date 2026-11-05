@@ -57,6 +57,7 @@ class Result:
     answers: list[str]
     broken: list[str] = field(default_factory=list)
     notes: dict[str, Any] = field(default_factory=dict)
+    rejected_for: list[str] = field(default_factory=list)
 
 
 def _replay(stores: Stores, fixture: Path) -> str:
@@ -111,12 +112,14 @@ def check_case(spec: dict[str, Any], model: LanguageModel) -> Result:
     case = stores.cases.list()[0]
     status_before = case.status
 
+    rejected_for: list[str] = []
     try:
         record = service.run(case_id, ANALYST)
-    except Rejected:
+    except Rejected as exc:
         record = None
+        rejected_for = exc.problems
 
-    result = Result(spec["id"], record is not None, recording.answers)
+    result = Result(spec["id"], record is not None, recording.answers, rejected_for=rejected_for)
     broken = result.broken
     stored = stores.investigations.list_for_case(case_id)
     actions = [r.action for r in stores.audit.records(case_id)]
@@ -191,8 +194,10 @@ def main() -> int:
     for result in results:
         print(f"--- {result.case_id}: {'stored' if result.stored else 'rejected, nothing stored'}")
         print(f"answers: {len(result.answers)}, how it did (not a pass or fail): {result.notes or 'n/a'}")
+        for problem in result.rejected_for:
+            print(f"rejected for: {problem[:500]}")
         for answer in result.answers:
-            print(answer[:1500])
+            print(answer[:6000])
 
     problems = verdict(results)
     for problem in problems:
