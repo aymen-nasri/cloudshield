@@ -48,7 +48,11 @@ def main() -> int:
             print(f"{name:<28} -> {response.status_code} {response.json()}")
             response.raise_for_status()
 
-        cases = client.get("/v1/cases").json()
+        token = os.getenv("CLOUDSHIELD_ANALYST_TOKEN")
+        if not token:
+            print("\nSet CLOUDSHIELD_ANALYST_TOKEN to list the resulting cases.")
+            return 0
+        cases = client.get("/v1/cases", headers={"authorization": f"Bearer {token}"}).json()
         print(
             f"\n{len(cases)} case(s): "
             + ", ".join(f"{c['case_id']} ({c['event_count']} events)" for c in cases)

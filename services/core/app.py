@@ -270,8 +270,10 @@ def create_app(
         stores.close()
 
     app = FastAPI(title="CloudShield", version="0.3.0", lifespan=lifespan)
-    app.include_router(build_ingestion_router(pipeline, adapters, settings.credentials, coverage))
-    app.include_router(build_cases_router(stores.cases, stores.audit, stores.entities))
+    app.include_router(
+        build_ingestion_router(pipeline, adapters, settings.credentials, coverage, settings.analysts)
+    )
+    app.include_router(build_cases_router(stores.cases, stores.audit, stores.entities, settings.analysts))
     app.include_router(build_response_router(response, settings.analysts))
     app.include_router(build_investigation_router(investigations, settings.analysts))
     app.include_router(build_console_router(settings.analysts, settings.console_demo_token))

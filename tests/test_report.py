@@ -77,7 +77,7 @@ def test_planted_markdown_in_an_alert_cannot_reach_the_report_as_markup():
     client.post(
         "/v1/ingest/falco", content=json.dumps(alert).encode(), headers={"authorization": "Bearer falco-test"}
     )
-    case_id = client.get("/v1/cases").json()[0]["case_id"]
+    case_id = client.get("/v1/cases", headers=ALICE).json()[0]["case_id"]
     client.post(f"/v1/cases/{case_id}/investigations", headers=ALICE)
 
     report = client.get(f"/v1/cases/{case_id}/report", headers=ALICE).text
@@ -95,7 +95,7 @@ def test_report_route_needs_an_analyst_and_a_real_case():
         content=fixture_bytes("s1_suspicious_process", "falco_alert.json"),
         headers={"authorization": "Bearer falco-test"},
     )
-    case_id = client.get("/v1/cases").json()[0]["case_id"]
+    case_id = client.get("/v1/cases", headers=ALICE).json()[0]["case_id"]
     r = client.get(f"/v1/cases/{case_id}/report", headers=ALICE)
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/markdown")

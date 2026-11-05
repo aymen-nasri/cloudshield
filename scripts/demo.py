@@ -127,15 +127,15 @@ def run() -> Transcript:
     r = api.post("/v1/ingest/falco", content=fa, headers=falco_auth)
     row("", "replay", "same Falco alert delivered twice", f"{r.status_code} {r.json()['status']}", "dim")
 
-    [case] = api.get("/v1/cases").json()
-    detail = api.get(f"/v1/cases/{case['case_id']}").json()
+    [case] = api.get("/v1/cases", headers=alice).json()
+    detail = api.get(f"/v1/cases/{case['case_id']}", headers=alice).json()
     row(
         "3", "case", f"{case['event_count']} events in one case, severity {case['severity']}", case["case_id"]
     )
     note(f"joined by rule {detail['links'][1]['rule']}: same pod UID within 15 min")
-    for t in api.get(f"/v1/cases/{case['case_id']}/timeline").json():
+    for t in api.get(f"/v1/cases/{case['case_id']}/timeline", headers=alice).json():
         note(f"{t['event_time'][11:19]}Z  {t['source']:<9} {t['title'][:40]}")
-    graph = api.get(f"/v1/entities/k8s:pod/shop/{POD}/graph").json()
+    graph = api.get(f"/v1/entities/k8s:pod/shop/{POD}/graph", headers=alice).json()
     row("4", "enrich", "pod > deployment > service account > IAM role", f"{len(graph['entities'])} entities")
     inv = api.post(f"/v1/cases/{case['case_id']}/investigations", headers=alice).json()
     facts = inv["output"]["observed_facts"]
@@ -171,7 +171,7 @@ def run() -> Transcript:
     r = api.post(f"/v1/proposals/{pid}/execute", headers=bob)
     row("", "execute", "run it a second time", f"{r.status_code} refused", "bad")
 
-    audit = api.get("/v1/audit", params={"case_id": case["case_id"]}).json()
+    audit = api.get("/v1/audit", params={"case_id": case["case_id"]}, headers=alice).json()
     intact = "intact" if audit["chain_intact"] else "BROKEN"
     row("10", "audit", f"{len(audit['records'])} hash-chained records", f"chain {intact}", "good")
 

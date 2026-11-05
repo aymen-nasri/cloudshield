@@ -41,7 +41,7 @@ def _client() -> tuple[TestClient, FakePodApi]:
 
 
 def _case_id(client: TestClient) -> str:
-    return client.get("/v1/cases").json()[0]["case_id"]
+    return client.get("/v1/cases", headers=ALICE).json()[0]["case_id"]
 
 
 def test_every_response_route_needs_an_analyst():
@@ -64,6 +64,7 @@ def test_full_flow_over_http():
     assert created.status_code == 201
     pid = created.json()["proposal_id"]
 
+    assert client.post(f"/v1/proposals/{pid}/dry-run", headers=VIC).status_code == 403  # read-only
     checked = client.post(f"/v1/proposals/{pid}/dry-run", headers=BOB).json()
     assert checked["state"] == "awaiting_approval"
     assert checked["policy"]["required_approvals"] == 1
@@ -84,7 +85,7 @@ def test_full_flow_over_http():
 
     listed = client.get(f"/v1/cases/{case_id}/proposals", headers=VIC).json()
     assert [p["state"] for p in listed] == ["verified"]
-    assert client.get("/v1/audit", params={"case_id": case_id}).json()["chain_intact"] is True
+    assert client.get("/v1/audit", params={"case_id": case_id}, headers=ALICE).json()["chain_intact"] is True
 
 
 def test_directory_loads_hashed_tokens_only():
