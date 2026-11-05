@@ -171,6 +171,8 @@ jobs:
           kubectl wait --for=condition=Ready clusterpolicy/require-quarantine-exclusion --timeout=120s
       - name: Build this commit and deploy it with the Helm chart
         run: bash infra/kind/deploy-cloudshield.sh
+      - name: Install Prometheus and Grafana
+        run: bash infra/kind/deploy-monitoring.sh
       # This commit's image is unsigned (only main's CI signs), so enforcement starts after the deploy.
       # The job below runs the signed image under enforcement from the start.
       - name: Enforce image verification

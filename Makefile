@@ -52,6 +52,7 @@ lab-up:
 		kubectl apply -f infra/policies/kyverno/require-quarantine-exclusion.yaml && break; sleep 10; \
 	done
 	bash infra/kind/deploy-cloudshield.sh
+	bash infra/kind/deploy-monitoring.sh
 	kubectl apply -f infra/policies/kyverno/verify-cloudshield-images.yaml
 	helm repo add falcosecurity https://falcosecurity.github.io/charts --force-update
 	helm upgrade --install falco falcosecurity/falco -n falco --create-namespace \
