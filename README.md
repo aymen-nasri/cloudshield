@@ -37,7 +37,7 @@ with grounded AI investigations and response actions that cannot bypass policy o
 | **What it does** | Turns AWS, Kubernetes and Linux security alerts into one evidence-backed case, then lets a containment action run only after a policy check and a named human approval, verifies the result, and writes the post-incident report ([sample](docs/sample-incident-report.md)) |
 | **Built with** | Python · FastAPI · Pydantic · PostgreSQL · OCSF · Kyverno · GitHub Actions, with OpenTofu validated in CI and the Helm chart deployed to a kind cluster in CI |
 | **Works with** | Falco, GuardDuty and Wazuh alert formats · the Kubernetes API (a live kind cluster in CI) · Amazon Bedrock (client written, not yet run) |
-| **Evidence it works** | 160+ automated tests in CI (including PostgreSQL and policy-bypass tests), infrastructure validated in CI with OpenTofu, Helm, kubeconform and Kyverno, the replayable demo below, and scenario S1 on a live kind cluster on every pull request |
+| **Evidence it works** | 200+ automated tests in CI (including PostgreSQL and policy-bypass tests), infrastructure validated in CI with OpenTofu, Helm, kubeconform and Kyverno, the replayable demo below, and scenario S1 on a live kind cluster on every pull request |
 | **Status** | The detect → case → investigate → approve → contain → verify → report loop works in code and in CI, and its Kubernetes half runs on a real kind cluster on every pull request. It has **not yet run on EKS, an AWS account or Bedrock** (see [Roadmap](#roadmap)) |
 
 **Reading this README:** it describes the full design. The [Build status](#build-status) table below says what is built, what is written as code, and what is planned.
@@ -68,9 +68,9 @@ What exists today, in one place. ✅ **built and tested** here · 🧩 **written
 | **Response** | Policy gate, hash-bound expiring approvals, quarantine and rollback **on a live kind cluster**, verified by CloudShield's own traffic probe | Step Functions + Lambda path for AWS | More actions: revoke IAM sessions, isolate an EC2 instance |
 | **Kubernetes** | CloudShield running as a pod from its Helm chart, Falco (modern eBPF) detecting a live attack in the lab, Calico NetworkPolicies, least-privilege RBAC checked against a live API server, Kyverno admission rejecting a leaky allow-policy and any image this repo's CI didn't sign | EKS | Cilium/Hubble |
 | **AWS** | GuardDuty findings, Pod Identity and EC2 lookups (against simulated AWS) | OpenTofu lab: VPC, EKS, GuardDuty, S3 Object Lock, KMS, budgets, GitHub OIDC | Lab bring-up on a real account |
-| **Delivery** | Tests on PostgreSQL, ruff, mypy, Gitleaks, Trivy, SBOM, infrastructure validation, kind end-to-end job, dependency review, Dependabot, images on GHCR signed with Cosign and carrying a signed SBOM | ECR push | Branch protection, Argo CD |
+| **Delivery** | Tests on PostgreSQL, ruff, mypy, Gitleaks, Trivy, SBOM, infrastructure validation, kind end-to-end job, dependency review, Dependabot, images on GHCR signed with Cosign and carrying a signed SBOM, and the signed image started on a cluster with image verification enforced | ECR push | Branch protection, Argo CD |
 | **Analyst tools** | Incident console, post-incident report | — | Chat approvals (Slack/Teams) |
-| **Operations** | Sensor coverage heartbeat | Dead-letter queue alarm | Prometheus metrics, Grafana, OpenTelemetry |
+| **Operations** | Sensor coverage heartbeat, Prometheus `/metrics` (alerts, ingest lag, response outcomes, verification checks) checked against a real run | Dead-letter queue alarm | Prometheus server, Grafana, OpenTelemetry |
 
 The deep-dive pages in [`docs/`](docs) use the same markers in every technology table. What is planned next is in the [Roadmap](#roadmap).
 
@@ -151,7 +151,7 @@ CloudShield does **not** reinvent detection, a SIEM, or AWS's own AI investigati
 | **Data engineering** | OCSF normalization, idempotent ingestion, PostgreSQL modeling and migrations | 🧩 dead-letter queue · 📐 OpenSearch |
 | **AI engineering** | Runbook retrieval, structured outputs, citation enforcement, prompt-injection defenses, evaluation harness | 🧩 Bedrock client · 📐 vector search, LangGraph, MCP |
 | **Software engineering** | FastAPI services, Pydantic contracts, state machines, hash-chained audit log, REST API and console | — |
-| **DevOps** | GitHub Actions, Docker, a kind cluster built and tested in CI | 🧩 OpenTofu, Ansible · 📐 Argo CD, Prometheus/Grafana, OpenTelemetry |
+| **DevOps** | GitHub Actions, Docker, a kind cluster built and tested in CI, Prometheus metrics | 🧩 OpenTofu, Ansible · 📐 Argo CD, Prometheus server, Grafana, OpenTelemetry |
 | **DevSecOps** | Gitleaks, Trivy, signed SBOM, keyless Cosign signing, dependency review, Dependabot, Kyverno admission, infrastructure validation | 🧩 GitHub OIDC to AWS · 📐 branch protection |
 
 > **How this goes beyond a typical SOC-automation lab:** a "Wazuh → SOAR → block IP" pipeline proves alert collection and automated containment. CloudShield goes further in three ways: **cross-layer resource context**, **investigation quality with provenance**, and **safety-aware, reversible, auditable response**.
@@ -328,7 +328,7 @@ Designed and scheduled, not built yet. Each one moves to ✅ in the [Build statu
 
 | Feature | What it adds | Milestone |
 |---|---|---|
-| **Prometheus metrics and a Grafana dashboard** | Ingest lag, queue depth, approval latency, model cost | M2 |
+| **Prometheus server and a Grafana dashboard** | Scraping, history and dashboards for the metrics CloudShield already exposes | M2 |
 | **AWS lab bring-up** | GuardDuty → EventBridge → SQS → CloudShield on a real account, with budget alarms | M1 |
 | **Bedrock with a Guardrail** | The evaluation harness scored against a real model before it is trusted | M3 |
 | **OpenSearch** | Search across events, and similar past cases for the investigator | M2 |
