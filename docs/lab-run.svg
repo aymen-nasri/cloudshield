@@ -1,47 +1,62 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="746" height="856" viewBox="0 0 746 856" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5">
-<rect width="746" height="856" rx="8" fill="#0d1117"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="746" height="1141" viewBox="0 0 746 1141" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5">
+<rect width="746" height="1141" rx="8" fill="#0d1117"/>
 <circle cx="18" cy="16" r="5" fill="#ff5f56"/><circle cx="34" cy="16" r="5" fill="#ffbd2e"/><circle cx="50" cy="16" r="5" fill="#27c93f"/>
 <text x="728" y="20" fill="#6e7681" text-anchor="end">python scripts/lab_e2e.py</text>
 <text x="18" y="48" fill="#e6edf3" font-weight="bold" xml:space="preserve">CloudShield · scenario S1 on a real Kubernetes cluster (kind), from a live Falco detection</text>
-<text x="18" y="67" fill="#8b949e" xml:space="preserve">real API, cluster, RBAC and NetworkPolicies · no AWS (IAM role and EC2 stay unresolved)</text>
+<text x="18" y="67" fill="#8b949e" xml:space="preserve">CloudShield runs as a pod · real RBAC and NetworkPolicies · no AWS: IAM and EC2 stay unresolved</text>
 <text x="18" y="86" fill="#c9d1d9" xml:space="preserve"></text>
 <text x="18" y="105" fill="#c9d1d9" xml:space="preserve">1  cluster  3 nodes, Calico, shop app with 3 checkout pods    -&gt; ready</text>
-<text x="18" y="124" fill="#8b949e" xml:space="preserve">            target checkout-b978689cd-kprpv (192.168.23.129) on cloudshield-lab-worker</text>
-<text x="18" y="143" fill="#3fb950" xml:space="preserve">   traffic  probe -&gt; both checkout pods on 8080               -&gt; reachable</text>
-<text x="18" y="162" fill="#c9d1d9" xml:space="preserve">2  attack   wget ... | sh in a debug container of the pod     -&gt; launched</text>
-<text x="18" y="181" fill="#8b949e" xml:space="preserve">            Falco (modern eBPF) -&gt; Falcosidekick -&gt; CloudShield webhook, token-authenticated</text>
-<text x="18" y="200" fill="#c9d1d9" xml:space="preserve">3  case     9 event(s), severity critical                     -&gt; case_01M6M2D9FPPMT00WGWW7SN90R0</text>
-<text x="18" y="219" fill="#8b949e" xml:space="preserve">            Drop and execute new binary in container</text>
-<text x="18" y="238" fill="#8b949e" xml:space="preserve">            Remote Script Piped to Shell in Container</text>
-<text x="18" y="257" fill="#8b949e" xml:space="preserve">            Unexpected Process in Protected Workload</text>
-<text x="18" y="276" fill="#3fb950" xml:space="preserve">4  enrich   pod &gt; deployment &gt; service account &gt; node         -&gt; 3 entities</text>
-<text x="18" y="295" fill="#8b949e" xml:space="preserve">            read as cloudshield-investigator (read-only RBAC); IAM role and EC2: unresolved</text>
-<text x="18" y="314" fill="#c9d1d9" xml:space="preserve">5  propose  alice: quarantine the target pod                  -&gt; proposed</text>
-<text x="18" y="333" fill="#3fb950" xml:space="preserve">6  gate     dry run as the responder, then the policy gate    -&gt; awaiting_approval</text>
-<text x="18" y="352" fill="#8b949e" xml:space="preserve">            impact: pod keeps running, loses allow-dns, checkout-allow</text>
-<text x="18" y="371" fill="#c9d1d9" xml:space="preserve">7  approve  bob, incident responder                           -&gt; approved</text>
-<text x="18" y="390" fill="#3fb950" xml:space="preserve">8  execute  label the live pod as cloudshield-responder       -&gt; verified</text>
-<text x="18" y="409" fill="#8b949e" xml:space="preserve">            label_present                  ok</text>
-<text x="18" y="428" fill="#8b949e" xml:space="preserve">            default_deny_present           ok</text>
-<text x="18" y="447" fill="#8b949e" xml:space="preserve">            no_allow_policy_selects_pod    ok</text>
-<text x="18" y="466" fill="#8b949e" xml:space="preserve">            pod_preserved_for_forensics    ok</text>
-<text x="18" y="485" fill="#8b949e" xml:space="preserve">            traffic_probe                  ok</text>
-<text x="18" y="504" fill="#3fb950" xml:space="preserve">9  traffic  probe -&gt; quarantined pod                          -&gt; blocked</text>
-<text x="18" y="523" fill="#3fb950" xml:space="preserve">   traffic  probe -&gt; another checkout pod                     -&gt; reachable</text>
-<text x="18" y="542" fill="#3fb950" xml:space="preserve">   forensic quarantined pod still running                     -&gt; Running</text>
-<text x="18" y="561" fill="#3fb950" xml:space="preserve">10 rollback remove the label (proposed, approved, verified)   -&gt; verified</text>
-<text x="18" y="580" fill="#3fb950" xml:space="preserve">   traffic  probe -&gt; released pod                             -&gt; reachable</text>
-<text x="18" y="599" fill="#3fb950" xml:space="preserve">11 rbac     least privilege, checked against the API server   -&gt; 6/6 refused</text>
-<text x="18" y="618" fill="#8b949e" xml:space="preserve">            responder cannot delete the pod    denied</text>
-<text x="18" y="637" fill="#8b949e" xml:space="preserve">            responder cannot read secrets      denied</text>
-<text x="18" y="656" fill="#8b949e" xml:space="preserve">            responder cannot touch kube-system denied</text>
-<text x="18" y="675" fill="#8b949e" xml:space="preserve">            investigator cannot patch pods     denied</text>
-<text x="18" y="694" fill="#8b949e" xml:space="preserve">            investigator cannot read secrets   denied</text>
-<text x="18" y="713" fill="#8b949e" xml:space="preserve">            prober cannot exec into the target denied</text>
-<text x="18" y="732" fill="#3fb950" xml:space="preserve">12 admit    Kyverno: allow-policy missing the exclusion       -&gt; rejected</text>
-<text x="18" y="751" fill="#3fb950" xml:space="preserve">   admit    the same policy with the exclusion                -&gt; admitted</text>
-<text x="18" y="770" fill="#8b949e" xml:space="preserve">            a leaky allow-policy would let a quarantined pod keep its traffic</text>
-<text x="18" y="789" fill="#3fb950" xml:space="preserve">13 audit    25 hash-chained records                           -&gt; chain intact</text>
-<text x="18" y="808" fill="#c9d1d9" xml:space="preserve"></text>
-<text x="18" y="827" fill="#3fb950" xml:space="preserve">all checks passed</text>
+<text x="18" y="124" fill="#3fb950" xml:space="preserve">   deploy   CloudShield pod, from its Helm chart              -&gt; running</text>
+<text x="18" y="143" fill="#8b949e" xml:space="preserve">            cloudshield-core-5946fdc76f-c95kl as cloudshield-investigator, 0 restarts</text>
+<text x="18" y="162" fill="#8b949e" xml:space="preserve">            target checkout-b978689cd-4h5lp (192.168.232.133) on cloudshield-lab-worker2</text>
+<text x="18" y="181" fill="#3fb950" xml:space="preserve">   traffic  probe -&gt; both checkout pods on 8080               -&gt; reachable</text>
+<text x="18" y="200" fill="#c9d1d9" xml:space="preserve">2  attack   wget ... | sh in a debug container of the pod     -&gt; launched</text>
+<text x="18" y="219" fill="#8b949e" xml:space="preserve">            Falco (modern eBPF) -&gt; Falcosidekick -&gt; CloudShield Service, token-authenticated</text>
+<text x="18" y="238" fill="#c9d1d9" xml:space="preserve">3  case     9 event(s), severity critical                     -&gt; case_01M6P5W0MHGDCNA4RBJRKV6CWH</text>
+<text x="18" y="257" fill="#8b949e" xml:space="preserve">            Drop and execute new binary in container</text>
+<text x="18" y="276" fill="#8b949e" xml:space="preserve">            Remote Script Piped to Shell in Container</text>
+<text x="18" y="295" fill="#8b949e" xml:space="preserve">            Unexpected Process in Protected Workload</text>
+<text x="18" y="314" fill="#3fb950" xml:space="preserve">4  enrich   pod &gt; deployment &gt; service account &gt; node         -&gt; 3 entities</text>
+<text x="18" y="333" fill="#8b949e" xml:space="preserve">            read as cloudshield-investigator (read-only RBAC); IAM role and EC2: unresolved</text>
+<text x="18" y="352" fill="#c9d1d9" xml:space="preserve">5  propose  alice: quarantine the target pod                  -&gt; proposed</text>
+<text x="18" y="371" fill="#3fb950" xml:space="preserve">6  gate     dry run as the responder, then the policy gate    -&gt; awaiting_approval</text>
+<text x="18" y="390" fill="#8b949e" xml:space="preserve">            impact: pod keeps running, loses allow-dns, checkout-allow</text>
+<text x="18" y="409" fill="#c9d1d9" xml:space="preserve">7  approve  bob, incident responder                           -&gt; approved</text>
+<text x="18" y="428" fill="#3fb950" xml:space="preserve">8  execute  label the live pod as cloudshield-responder       -&gt; verified</text>
+<text x="18" y="447" fill="#8b949e" xml:space="preserve">            label_present                  ok</text>
+<text x="18" y="466" fill="#8b949e" xml:space="preserve">            default_deny_present           ok</text>
+<text x="18" y="485" fill="#8b949e" xml:space="preserve">            no_allow_policy_selects_pod    ok</text>
+<text x="18" y="504" fill="#8b949e" xml:space="preserve">            pod_preserved_for_forensics    ok</text>
+<text x="18" y="523" fill="#8b949e" xml:space="preserve">            traffic_probe                  ok</text>
+<text x="18" y="542" fill="#3fb950" xml:space="preserve">   verify   CloudShield&#x27;s own probe saw the pod blocked       -&gt; yes</text>
+<text x="18" y="561" fill="#3fb950" xml:space="preserve">9  traffic  probe -&gt; quarantined pod                          -&gt; blocked</text>
+<text x="18" y="580" fill="#3fb950" xml:space="preserve">   traffic  probe -&gt; another checkout pod                     -&gt; reachable</text>
+<text x="18" y="599" fill="#3fb950" xml:space="preserve">   forensic quarantined pod still running                     -&gt; Running</text>
+<text x="18" y="618" fill="#3fb950" xml:space="preserve">10 rollback remove the label (proposed, approved, verified)   -&gt; verified</text>
+<text x="18" y="637" fill="#3fb950" xml:space="preserve">   traffic  probe -&gt; released pod                             -&gt; reachable</text>
+<text x="18" y="656" fill="#3fb950" xml:space="preserve">11 rbac     least privilege, checked against the API server   -&gt; 6/6 refused</text>
+<text x="18" y="675" fill="#8b949e" xml:space="preserve">            responder cannot delete the pod    denied</text>
+<text x="18" y="694" fill="#8b949e" xml:space="preserve">            responder cannot read secrets      denied</text>
+<text x="18" y="713" fill="#8b949e" xml:space="preserve">            responder cannot touch kube-system denied</text>
+<text x="18" y="732" fill="#8b949e" xml:space="preserve">            investigator cannot patch pods     denied</text>
+<text x="18" y="751" fill="#8b949e" xml:space="preserve">            investigator cannot read secrets   denied</text>
+<text x="18" y="770" fill="#8b949e" xml:space="preserve">            prober cannot exec into the target denied</text>
+<text x="18" y="789" fill="#3fb950" xml:space="preserve">12 admit    Kyverno: allow-policy missing the exclusion       -&gt; rejected</text>
+<text x="18" y="808" fill="#3fb950" xml:space="preserve">   admit    the same policy with the exclusion                -&gt; admitted</text>
+<text x="18" y="827" fill="#8b949e" xml:space="preserve">            a leaky allow-policy would let a quarantined pod keep its traffic</text>
+<text x="18" y="846" fill="#3fb950" xml:space="preserve">13 image    this repo&#x27;s signed image                          -&gt; admitted</text>
+<text x="18" y="865" fill="#8b949e" xml:space="preserve">            ghcr.io/aymen-nasri/cloudshield:main</text>
+<text x="18" y="884" fill="#3fb950" xml:space="preserve">   image    unsigned image                                    -&gt; rejected</text>
+<text x="18" y="903" fill="#8b949e" xml:space="preserve">            busybox:1.37.0</text>
+<text x="18" y="922" fill="#8b949e" xml:space="preserve">            kyverno: no signatures found</text>
+<text x="18" y="941" fill="#3fb950" xml:space="preserve">   image    signed, but by someone else                       -&gt; rejected</text>
+<text x="18" y="960" fill="#8b949e" xml:space="preserve">            ghcr.io/sigstore/cosign/cosign:v2.4.1</text>
+<text x="18" y="979" fill="#8b949e" xml:space="preserve">            kyverno: subject mismatch: expected</text>
+<text x="18" y="998" fill="#8b949e" xml:space="preserve">            https://github.com/aymen-nasri/cloudshield/.github/workflows/ci.yml@refs/heads/main,</text>
+<text x="18" y="1017" fill="#8b949e" xml:space="preserve">            received keyless@projectsigstore.iam.gserviceaccount.com</text>
+<text x="18" y="1036" fill="#3fb950" xml:space="preserve">14 audit    25 hash-chained records                           -&gt; chain intact</text>
+<text x="18" y="1055" fill="#3fb950" xml:space="preserve">15 metrics  /metrics agrees with what just happened           -&gt; agrees</text>
+<text x="18" y="1074" fill="#8b949e" xml:space="preserve">            49 alerts accepted, 2 actions verified, 2 traffic probes passed</text>
+<text x="18" y="1093" fill="#c9d1d9" xml:space="preserve"></text>
+<text x="18" y="1112" fill="#3fb950" xml:space="preserve">all checks passed</text>
 </svg>

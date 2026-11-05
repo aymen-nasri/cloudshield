@@ -20,6 +20,7 @@ import json
 import os
 import subprocess
 import sys
+import textwrap
 import time
 import uuid
 from collections.abc import Callable, Iterator
@@ -193,7 +194,8 @@ def rejection_reason(body: str) -> str:
         message = str(json.loads(body).get("message", body))
     except ValueError:
         message = body
-    return " ".join(message.split())[-170:]
+    message = " ".join(message.split())
+    return message.rpartition(".keyless: ")[2].rstrip("'") if ".keyless: " in message else message[-170:]
 
 
 def image_checks(core: Any) -> list[tuple[str, str, bool, str]]:
@@ -407,7 +409,8 @@ def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, lis
             row("13" if image == SIGNED_IMAGE else "", "image", label, want if ok else f"NOT {want}", ok)
             note(image)
             if reason:
-                note(f"kyverno: {rejection_reason(reason)}")
+                for line in textwrap.wrap(f"kyverno: {rejection_reason(reason)}", 84, break_on_hyphens=False):
+                    note(line)
 
     audit = api.get("/v1/audit", params={"case_id": case["case_id"]}).json()
     intact = audit["chain_intact"]
