@@ -2,17 +2,21 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.8.0] - 2026-11-05
 
-### Fixed
-- **An event nobody resent stayed out of any case.** If a failure fell between storing an event and linking it, and the producer never tried again, nothing would ever link it. The next startup now finds those events and links them.
+A compromised API pod can no longer start an action, which was the biggest limit stated in earlier releases. Nothing here has run on real AWS, EKS or Bedrock.
+
 ### Added
 - **Signed approvals: a compromised API pod can no longer start an action.** Approvers sign with a private key only they hold, using `scripts/sign_approval.py`, and the responder checks the signatures itself against public keys only it holds. A signature only works for that exact proposal, requester and approver, and expires after 15 minutes. The number needed comes from the pod's live labels. See [ADR 0005](docs/adr/0005-signed-approvals.md). This replaces the biggest limit stated in earlier releases.
 - **Only the API pod can reach the responder.** A NetworkPolicy now enforces this, and the kind lab checks it from a pod in another namespace.
 
 ### Changed
+- **Branch protection is on.** `main` requires all the CI checks, for admins too, and refuses force pushes.
 - **Upgrading:** the responder won't start without `CLOUDSHIELD_APPROVER_KEYS_FILE`, and the API refuses an unsigned approval when it uses the responder. The analyst console can't approve in that setup, because the browser has no key.
 - `cryptography` is now a runtime dependency.
+
+### Fixed
+- **An event nobody resent stayed out of any case.** If a failure fell between storing an event and linking it, and the producer never tried again, nothing would ever link it. The next startup now finds those events and links them.
 
 ## [0.7.0] - 2026-11-05
 
@@ -152,6 +156,7 @@ code and in CI. It has not yet run on a real cluster or AWS account (see the REA
   Trivy image scan and SBOM, and infrastructure validation (tofu validate, helm lint, kubeconform,
   kyverno test, Ansible syntax check).
 
+[0.8.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.8.0
 [0.7.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.7.0
 [0.6.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.6.0
 [0.5.0]: https://github.com/aymen-nasri/cloudshield/releases/tag/v0.5.0
