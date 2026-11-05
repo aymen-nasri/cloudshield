@@ -13,6 +13,7 @@ from psycopg.types.json import Jsonb
 from cases.audit import GENESIS_HASH, ActorType, AuditRecord, format_ts, make_record, verify_chain
 from cases.models import Case, CaseLink
 from cases.state import ProposalState
+from cases.store import CaseStore
 from common.ids import new_id
 from common.models import (
     CorrelationKeys,
@@ -120,6 +121,15 @@ class PostgresEventStore:
         with self.db.pool.connection() as conn:
             row = conn.execute("SELECT * FROM event WHERE event_id = %s", (event_id,)).fetchone()
         return _event_from_row(row) if row else None
+
+    def unlinked(self, cases: CaseStore) -> list[NormalizedEvent]:
+        # A join here, rather than asking `cases` about each event, because this table can be large.
+        with self.db.pool.connection() as conn:
+            rows = conn.execute(
+                "SELECT e.* FROM event e LEFT JOIN incident_event ie USING (event_id)"
+                " WHERE ie.event_id IS NULL ORDER BY e.event_time"
+            ).fetchall()
+        return [_event_from_row(r) for r in rows]
 
 
 class PostgresCaseStore:
