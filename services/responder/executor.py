@@ -2,10 +2,11 @@
 workflow (statemachine/quarantine.asl.json) with the responder's own IAM/RBAC identity.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, Protocol
 
 from common.models import ResponseProposal, Target
+from policy.approvals import Approval
 from responder.quarantine import (
     ExecutionResult,
     PodApi,
@@ -35,7 +36,7 @@ class Executor(Protocol):
 
     def dry_run(self, proposal: ResponseProposal) -> tuple[ExecutionResult, dict[str, Any]]: ...
 
-    def execute(self, proposal: ResponseProposal) -> ExecutionResult: ...
+    def execute(self, proposal: ResponseProposal, approvals: Sequence[Approval] = ()) -> ExecutionResult: ...
 
     def verify(self, proposal: ResponseProposal) -> VerificationReport: ...
 
@@ -86,7 +87,8 @@ class KubernetesExecutor:
         )
         return result, impact
 
-    def execute(self, proposal: ResponseProposal) -> ExecutionResult:
+    def execute(self, proposal: ResponseProposal, approvals: Sequence[Approval] = ()) -> ExecutionResult:
+        # Approvals are the caller's to check: this class runs inside the process that decides.
         action, _ = self._action(proposal.action_type)
         if proposal.action_type == "k8s.pod.quarantine_label":
             before = peer_can_connect(self.api, proposal.target, self.probe)

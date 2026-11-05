@@ -66,6 +66,18 @@ def _approve(env, record, who=BOB):
     )  # fmt: skip
 
 
+def test_a_signature_is_kept_with_the_approval(env):
+    record = _ready(env)
+    proposal_id = record.proposal.proposal_id
+    env.service.decide(
+        proposal_id, BOB, decision="approve", bound_hash=record.proposal_hash, justification="ok",
+        signature="a-signature", signed_at=NOW,
+    )  # fmt: skip
+    [approval] = env.service.get(proposal_id).approvals
+    assert approval.signature == "a-signature"
+    assert approval.signed_at == NOW
+
+
 def _needs_two_approvals(env):
     env.pods.pod["metadata"]["labels"]["cloudshield.io/tier"] = "critical"
     record = _ready(env)

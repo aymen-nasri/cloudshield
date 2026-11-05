@@ -1,10 +1,12 @@
 """An Executor that asks the responder service to act, so this process holds no write access."""
 
+from collections.abc import Sequence
 from typing import Any
 
 import httpx
 
 from common.models import ResponseProposal, Target
+from policy.approvals import Approval
 from responder.quarantine import ExecutionResult, VerificationReport
 
 # Verification retries while the CNI applies the label, so a call can take a while.
@@ -17,6 +19,7 @@ class ResponderError(Exception):
 
 class RemoteExecutor:
     identity = "cloudshield-responder"
+    requires_signed_approvals = True
 
     def __init__(self, client: httpx.Client, token: str) -> None:
         self.client = client
@@ -48,8 +51,14 @@ class RemoteExecutor:
         answer = self._proposal("dry-run", proposal)
         return ExecutionResult(**answer["result"]), answer["impact"]
 
-    def execute(self, proposal: ResponseProposal) -> ExecutionResult:
-        return ExecutionResult(**self._proposal("execute", proposal)["result"])
+    def execute(self, proposal: ResponseProposal, approvals: Sequence[Approval] = ()) -> ExecutionResult:
+        signed = [
+            {"approver": a.approver, "signed_at": a.signed_at.isoformat(), "signature": a.signature}
+            for a in approvals
+            if a.decision == "approve" and a.signature and a.signed_at
+        ]
+        body = {"proposal": proposal.model_dump(mode="json"), "approvals": signed}
+        return ExecutionResult(**self._call("execute", body)["result"])
 
     def verify(self, proposal: ResponseProposal) -> VerificationReport:
         return VerificationReport(**self._proposal("verify", proposal))

@@ -128,13 +128,15 @@ spec:
 
 ### Required controls
 
-- **Separation of privileges:** the LLM has read-only tools; the executor has action-specific IAM/RBAC and nothing else. In the lab it's a separate pod: the API holds no Kubernetes write access and calls it with a shared token, and the responder re-checks policy itself.
+- **Separation of privileges:** the LLM has read-only tools; the executor has action-specific IAM/RBAC and nothing else. In the lab it's a separate pod: the API holds no Kubernetes write access and calls it with a shared token, and the responder re-checks policy and approvals itself.
 - **Structured action schemas** with exact resource identifiers, environment and expiry.
 - **An independent policy engine** that checks target allowlists and approver authorization. Change windows and risky dependencies are 📐 planned, not checked yet.
 - **Explicit dry-run.** Failing to approve means no action.
 - **Time-bounded approvals** bound to the proposal hash, with protection against replay, stale targets and duplicate execution.
 - **Verification, audit records, a rollback plan and on-call escalation** for every action.
 - **Meaningful human review:** the console shows evidence, consequences and alternatives, not just an "Approve" button.
+
+**Signed approvals.** Where a separate responder pod acts, it doesn't take the API's word for who approved. Each approver signs the proposal with a private key only they hold ([`scripts/sign_approval.py`](../scripts/sign_approval.py)), and the responder checks the signature against public keys only it holds. So a compromised API pod, holding the shared token, can't start an action by itself. The reasoning and the limits are in [ADR 0005](adr/0005-signed-approvals.md).
 
 **When things go wrong partway:**
 

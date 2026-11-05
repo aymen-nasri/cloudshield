@@ -218,6 +218,8 @@ class ResponseService:
         decision: Literal["approve", "reject"],
         bound_hash: str,
         justification: str,
+        signature: str | None = None,
+        signed_at: datetime | None = None,
     ) -> ProposalRecord:
         with self._lock:
             record = self._record(proposal_id)
@@ -234,6 +236,12 @@ class ResponseService:
                 raise Conflict("proposal_hash does not match the current proposal; review it again")
             if not justification.strip():
                 raise Invalid("a justification is required")
+            if (
+                decision == "approve"
+                and getattr(self.executor, "requires_signed_approvals", False)
+                and not (signature and signed_at)
+            ):
+                raise Invalid("this deployment needs a signed approval: see scripts/sign_approval.py")
 
             approval = Approval(
                 proposal_id=proposal_id,
@@ -243,6 +251,8 @@ class ResponseService:
                 bound_hash=bound_hash,
                 decided_at=self.clock(),
                 justification=justification,
+                signature=signature,
+                signed_at=signed_at,
             )
             # An expired approval counts for nothing, so its approver may give it again. Without this,
             # a proposal needing two approvals sticks if the first expires before the second arrives.
@@ -313,7 +323,7 @@ class ResponseService:
             self._move(record, S.EXECUTING, principal, idempotency_key=idempotency_key)
 
             try:
-                result = self.executor.execute(record.proposal)
+                result = self.executor.execute(record.proposal, record.approvals)
                 report = self.executor.verify(record.proposal)
             except Exception as exc:  # the executor talks to real infrastructure; record and escalate
                 execution = replace(
