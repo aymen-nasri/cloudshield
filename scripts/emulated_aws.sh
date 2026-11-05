@@ -11,6 +11,8 @@ lab=infra/tofu/envs/lab
 moto_server -H 127.0.0.1 -p 5000 >moto.log 2>&1 &
 moto_pid=$!
 cleanup() {
+  status=$?
+  [ "$status" = 0 ] || docker logs --tail 40 stepfunctions-local 2>&1 || true
   kill "$moto_pid" 2>/dev/null || true
   docker rm -f stepfunctions-local >/dev/null 2>&1 || true
   rm -rf "$lab/emulator_override.tf" "$lab/.terraform" "$lab/.terraform.lock.hcl" "$lab"/terraform.tfstate*
