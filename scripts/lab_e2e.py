@@ -15,6 +15,7 @@ Exits non-zero if any check fails, so CI can run it on every pull request.
 """
 
 import argparse
+import base64
 import copy
 import json
 import os
@@ -47,7 +48,7 @@ LEAKY = (
 )
 CLUSTER, NS, PROBE = "kind-cloudshield-lab", "shop", "probe"
 IMAGE_NS = "cloudshield"
-SERVICE, LOCAL_PORT = "cloudshield-core", 18080
+SERVICE, RESPONDER, LOCAL_PORT = "cloudshield-core", "cloudshield-responder", 18080
 SIGNED_IMAGE = "ghcr.io/aymen-nasri/cloudshield:main"
 UNSIGNED_IMAGE = "busybox:1.37.0"
 OTHER_SIGNER_IMAGE = "ghcr.io/sigstore/cosign/cosign:v2.4.1"  # keyless-signed, by Sigstore's workflow
@@ -308,6 +309,43 @@ def monitoring_checks(verified: float) -> list[tuple[str, str, bool]]:
     ]
 
 
+def identity_checks(admin: Any) -> list[tuple[str, str, bool]]:
+    """The API pod holds no write access, and the responder decides for itself."""
+    pod_of = lambda name: admin.list_namespaced_pod(  # noqa: E731
+        IMAGE_NS, label_selector=f"app.kubernetes.io/name={name}"
+    ).items[0]
+    api_pod, responder_pod = pod_of(SERVICE), pod_of(RESPONDER)
+    secrets = {v.secret.secret_name for v in api_pod.spec.volumes if v.secret}
+    secret = kubectl(
+        "-n", IMAGE_NS, "get", "secret", "cloudshield-responder-api", "-o", "jsonpath={.data.token}"
+    )
+    token = base64.b64decode(secret.stdout).decode()
+
+    target = {"kind": "Pod", "name": "coredns", "uid": "x", "namespace": "kube-system"}
+    proposal = {
+        "proposal_id": "lab-check", "case_id": "lab-check", "action_type": "k8s.pod.quarantine_label",
+        "target": target, "environment": "lab", "rationale": "lab check", "requested_by": "lab-check",
+        "created_at": datetime.now(UTC).isoformat(), "dry_run_passed": True,
+    }  # fmt: skip
+    deleting = {**proposal, "action_type": "k8s.pod.delete"}
+    with forwarded(IMAGE_NS, RESPONDER, LOCAL_PORT + 2, 80, "/healthz") as responder:
+        path, auth = "/v1/responder/execute", {"authorization": f"Bearer {token}"}
+        no_token = responder.post(path, json=proposal).status_code
+        kube_system = responder.post(path, json=proposal, headers=auth).status_code
+        not_allowlisted = responder.post(path, json=deleting, headers=auth).status_code
+    return [
+        ("API pod runs as the read-only investigator", api_pod.spec.service_account_name,
+         api_pod.spec.service_account_name == "cloudshield-investigator"),
+        ("API pod mounts no Kubernetes token but its own", ", ".join(sorted(secrets)),
+         secrets == {"cloudshield-responder-api"}),
+        ("responder runs as a separate pod and identity", responder_pod.spec.service_account_name,
+         responder_pod.spec.service_account_name == "cloudshield-responder"),
+        ("responder refuses a call with no token", f"{no_token}", no_token == 401),
+        ("responder refuses kube-system, even with the token", f"{kube_system}", kube_system == 403),
+        ("responder refuses a non-allowlisted action", f"{not_allowlisted}", not_allowlisted == 403),
+    ]  # fmt: skip
+
+
 def core_pod(admin: Any) -> Any:
     return admin.list_namespaced_pod(IMAGE_NS, label_selector=f"app.kubernetes.io/name={SERVICE}").items[0]
 
@@ -526,6 +564,9 @@ def run(api: httpx.Client, alert: str, admission: bool) -> tuple[Transcript, lis
     note(
         f"{accepted:.0f} alerts accepted, {verified:.0f} actions verified, {probes:.0f} traffic probes passed"
     )
+
+    for label, result, ok in identity_checks(admin):
+        row("", "identity", label, result, ok)
 
     for label, result, ok in monitoring_checks(verified):
         row("", "monitor", label, result, ok)

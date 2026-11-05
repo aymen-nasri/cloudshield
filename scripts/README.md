@@ -10,6 +10,7 @@ Back to the [project README](../README.md).
 | [`lab_e2e.py`](lab_e2e.py) | Scenario S1 against the kind lab. With `--alert falco` (what CI runs) it attacks a live pod and waits for Falco's real alert; by default it replays the S1 alert. Then it quarantines the pod as the responder identity, prove with real traffic that it is cut off and that rollback restores it, check RBAC refusals | **real** (kind) | none | the `kind lab` job |
 | [`console_demo.py`](console_demo.py) | Serves the analyst console on demo data at http://127.0.0.1:8090/console | simulated | simulated | `tests/test_console.py` |
 | [`replay_fixture.py`](replay_fixture.py) | Sends a scenario's alerts from `detections/fixtures/` to a running API | n/a | n/a | — |
+| [`compose_check.sh`](compose_check.sh) | The README's `docker compose` setup, from `.env.example` through login to a restart that must keep the case | n/a | n/a | the `docker compose` job |
 | [`export_schemas.py`](export_schemas.py) | Writes the JSON Schemas in `schemas/` from the Pydantic contracts | n/a | n/a | the schema drift check |
 
 ```bash

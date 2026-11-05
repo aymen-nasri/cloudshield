@@ -2,6 +2,18 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- **The responder runs as its own pod.** The API pod runs as the read-only investigator and holds no Kubernetes write access. It calls the responder with a shared token, and the responder re-checks the policy itself, so a stolen token can only ask for allowlisted actions in allowlisted namespaces.
+- **PostgreSQL in the kind lab.** The lab stops CloudShield's process and checks that the case, both verified actions and the audit chain are still there.
+- **Prometheus and Grafana in the kind lab.** Prometheus scrapes `/metrics` with its own read-only login, with alert rules including one for skipped traffic checks. The lab checks that the run's numbers come back through both.
+- **The `docker compose` setup runs in CI,** from `.env.example` through the analyst login to a restart that must keep the case.
+
+### Changed
+- `httpx` is now a runtime dependency, because the API calls the responder with it.
+- The compose stack keeps raw evidence in a named volume owned by the app's user, instead of a directory Docker creates as root.
+
 ## [0.4.0] - 2026-11-05
 
 **Security fix: upgrade from 0.3.0 and earlier.** Those versions let anyone read cases, timelines and the audit log with no login. See Fixed.

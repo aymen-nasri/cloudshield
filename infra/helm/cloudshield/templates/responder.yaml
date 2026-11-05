@@ -1,0 +1,67 @@
+{{- if .Values.responder.enabled }}
+# The only pod with an identity that can change the cluster. The API calls it and holds no such access.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudshield-responder
+  labels: { app.kubernetes.io/name: cloudshield-responder }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: cloudshield-responder }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: cloudshield-responder }
+    spec:
+      serviceAccountName: cloudshield-responder
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001 # lets the non-root process read the mounted tokens
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: responder
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["uvicorn", "responder.server:create_app", "--factory", "--host", "0.0.0.0", "--port", "8081"]
+          ports: [{ name: http, containerPort: 8081 }]
+          env:
+            - { name: CLOUDSHIELD_RESPONDER_API_TOKEN_FILE, value: /var/run/secrets/cloudshield/api/token }
+            {{- if .Values.trafficProbe.pod }}
+            - { name: CLOUDSHIELD_PROBE_POD, value: {{ .Values.trafficProbe.pod | quote }} }
+            - { name: CLOUDSHIELD_PROBE_TOKEN_FILE, value: /var/run/secrets/cloudshield/prober/token }
+            - { name: CLOUDSHIELD_PROBE_TARGET_SELECTOR, value: {{ .Values.trafficProbe.targetSelector | quote }} }
+            {{- end }}
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: api-token, mountPath: /var/run/secrets/cloudshield/api, readOnly: true }
+            {{- if .Values.trafficProbe.pod }}
+            - { name: prober-token, mountPath: /var/run/secrets/cloudshield/prober, readOnly: true }
+            {{- end }}
+      volumes:
+        - { name: tmp, emptyDir: {} }
+        - name: api-token
+          secret: { secretName: {{ .Values.responder.apiTokenSecret }}, defaultMode: 0440 }
+        {{- if .Values.trafficProbe.pod }}
+        - name: prober-token
+          secret: { secretName: {{ .Values.trafficProbe.tokenSecret }}, defaultMode: 0440 }
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudshield-responder
+spec:
+  selector: { app.kubernetes.io/name: cloudshield-responder }
+  ports:
+    - { name: http, port: 80, targetPort: http }
+{{- end }}
