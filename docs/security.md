@@ -2,7 +2,7 @@
 
 What can go wrong with CloudShield itself, and the pipeline that protects it. Part of the [CloudShield documentation](../README.md#documentation).
 
-Status markers: ✅ built and tested · 🧩 written as code, not deployed · 📐 designed only.
+Status markers: ✅ built and tested · 🧩 written as code, not deployed · 📐 designed only · 🔬 run on an emulator or a stand-in, not on real AWS.
 
 ## Threat model and AI safety
 
@@ -69,7 +69,7 @@ flowchart LR
     GHA["GitHub Actions"] -. "OIDC: short-lived credentials" .-> STS["AWS STS"]
 ```
 
-> **What runs today.** ✅ On every pull request: tests with a PostgreSQL service, ruff, mypy, Gitleaks, infrastructure validation, the Docker build, the Trivy scan, an SBOM, dependency review, and scenario S1 on a three-node kind cluster with Falco, Kyverno admission (network rules and image signatures), real traffic checks, numbers from the run read back through Prometheus and Grafana, and a restart that must keep the data in PostgreSQL. A separate job runs the README's `docker compose` setup, login included. Dependabot opens weekly update pull requests for Python packages, GitHub Actions and the base image. ✅ On every push to `main`, the image is pushed to GHCR, signed keylessly with Cosign, given a signed SBOM attestation, and both are verified against the workflow's identity. A separate job then starts that signed image on a cluster with image verification enforced from the beginning, and checks that an unsigned image is refused. 🧩 The ECR push is written but skips until an AWS role is configured. 📐 Branch protection, the Argo CD deploy and smoke tests are designed.
+> **What runs today.** ✅ On every pull request: tests with a PostgreSQL service, ruff, mypy, Gitleaks, infrastructure validation, the Docker build, the Trivy scan, an SBOM, dependency review, and scenario S1 on a three-node kind cluster with Falco, Kyverno admission (network rules and image signatures), real traffic checks, numbers from the run read back through Prometheus and Grafana, and a restart that must keep the data in PostgreSQL. A separate job runs the README's `docker compose` setup, login included. 🔬 Two more run the [AWS paths on emulators](evaluation.md#testing-without-an-aws-account) and a real local model through the investigation checks, with no AWS account. Dependabot opens weekly update pull requests for Python packages, GitHub Actions and the base image. ✅ On every push to `main`, the image is pushed to GHCR, signed keylessly with Cosign, given a signed SBOM attestation, and both are verified against the workflow's identity. A separate job then starts that signed image on a cluster with image verification enforced from the beginning, and checks that an unsigned image is refused. 🧩 The ECR push is written but skips until an AWS role is configured. 📐 Branch protection, the Argo CD deploy and smoke tests are designed.
 
 ### DevOps tooling
 

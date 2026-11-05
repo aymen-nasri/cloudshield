@@ -78,4 +78,4 @@ for _ in $(seq 1 30); do
 done
 
 CLOUDSHIELD_EMULATED_AWS=$endpoint CLOUDSHIELD_STEPFUNCTIONS_LOCAL=http://127.0.0.1:8083 \
-  python -m pytest tests/test_emulated_aws.py tests/test_emulated_stepfunctions.py -v -rs --no-header -p no:cacheprovider
+  python -m pytest tests/test_emulated_aws.py tests/test_emulated_stepfunctions.py tests/test_bedrock_request.py   -v -rs --no-header -p no:cacheprovider

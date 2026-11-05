@@ -2,6 +2,22 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+The AWS paths now run in CI on emulators, with no AWS account. This is not a deployment: nothing here has run on real AWS, EKS or Bedrock.
+
+### Added
+- **Emulated AWS job.** The lab's real OpenTofu files are applied to Moto, then a finding goes through EventBridge and SQS into a case, and evidence goes into the Object Lock bucket.
+- **The real state machine on AWS Step Functions Local,** calling the real Lambda handler through a small stand-in for the Invoke API.
+- **A local model option.** `CLOUDSHIELD_INVESTIGATOR=ollama` uses a model on your own machine. A CI job runs a small one through the investigation checks, and fails only if a guarantee breaks or no answer reached the checks.
+- **A stated limit:** citations prove that an event exists, not that it says what the answer claims. The first real model run showed this, and that planted text in S8 can sway a model. See `docs/evaluation.md`.
+- **Bedrock request checks** against AWS's published API definition, with botocore's Stubber. No call leaves the machine.
+
+### Fixed
+- **One pod was two entities.** The GuardDuty adapter wrote `k8s:pods/…` where Falco writes `k8s:pod/…`, so a pod's two alerts named different entities, and enrichment skipped GuardDuty's. A real model's answer exposed this; no scripted test had.
+- Evidence uploads now send a SHA-256 checksum. Moto refused an upload to an Object Lock bucket without one, in line with S3's documented rule. Not yet seen on real S3.
+- The GuardDuty adapter takes the account from the finding's `accountId` first, and no longer needs the EventBridge envelope to carry one. Moto's messages leave that field out.
+
 ## [0.5.0] - 2026-11-05
 
 The API pod no longer holds any Kubernetes write access: a separate responder pod does the acting and re-checks the policy itself. The kind lab now also runs PostgreSQL, Prometheus and Grafana. It has not yet run on EKS, a real AWS account or Bedrock.

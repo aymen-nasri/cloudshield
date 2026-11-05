@@ -2,7 +2,7 @@
 
 How the investigator stays grounded, cited and unable to act. Part of the [CloudShield documentation](../README.md#documentation).
 
-Status markers: ✅ built and tested · 🧩 written as code, not deployed · 📐 designed only.
+Status markers: ✅ built and tested · 🧩 written as code, not deployed · 📐 designed only · 🔬 run on an emulator or a stand-in, not on real AWS.
 
 ## AI investigation layer
 
@@ -21,7 +21,8 @@ Status markers: ✅ built and tested · 🧩 written as code, not deployed · �
 
 | Technology | Role | Status |
 |---|---|---|
-| **Amazon Bedrock** | Managed foundation-model inference in the same AWS account and IAM boundary | 🧩 client written; not yet run (needs AWS access) |
+| **Amazon Bedrock** | Managed foundation-model inference in the same AWS account and IAM boundary | 🧩 client written; not yet run (needs AWS access) · 🔬 request format checked against AWS's API definition |
+| **Ollama** | A real language model on your own machine, with no account | ✅ a small model goes through the investigation checks in CI |
 | **Offline baseline model** | Deterministic stand-in with no language model, so the path runs without AWS | ✅ used by tests, the demo and the eval harness |
 | **RAG** | Retrieval of evidence and trusted reference text at query time | ✅ runbooks matched by event type and ATT&CK technique |
 | **OpenSearch lexical → vector search** | Similar past cases and runbook passages | 📐 |
@@ -108,11 +109,13 @@ class Investigation(BaseModel):
 3. A valid investigation is stored with its model ID, prompt version, runbooks used and number of attempts, and recorded in the audit log under the model's identity.
 4. An analyst accepts or rejects it, once. Nothing in an investigation can start a response action.
 
-**Models:** `CLOUDSHIELD_INVESTIGATOR=bedrock` uses Amazon Bedrock. `offline` is a deterministic baseline with no language model ([`offline.py`](../services/investigator/offline.py)): it restates the evidence as cited facts, so the whole path runs in tests, the demo and the lab without AWS. The eval harness scores it as the floor any real model has to beat.
+**Models:** `CLOUDSHIELD_INVESTIGATOR=bedrock` uses Amazon Bedrock. `ollama` uses a model on your own machine ([`ollama.py`](../services/investigator/ollama.py)), named by `CLOUDSHIELD_OLLAMA_MODEL`, with `CLOUDSHIELD_OLLAMA_URL` if it isn't on the default port. `offline` is a deterministic baseline with no language model ([`offline.py`](../services/investigator/offline.py)): it restates the evidence as cited facts, so the whole path runs in tests, the demo and the lab without AWS. The eval harness scores it as the floor any real model has to beat.
 
 ### Why guardrails alone are not enough
 
 Logs, alert descriptions and retrieved pages can carry **attacker-controlled text**. OWASP lists prompt injection and excessive agency among the top LLM application risks [[R12]](references.md#references). CloudShield treats every event field and every RAG passage as untrusted, and it enforces access and actions **outside the model**. Bedrock Guardrails adds protection but never replaces independent authorization [[R10]](references.md#references).
+
+**A citation isn't proof.** The validator checks that a cited event exists, not that it says what the answer claims. [A real model's first run](https://github.com/aymen-nasri/cloudshield/actions/runs/42091909670) showed both limits: an answer stating neither required fact was stored, and the planted text in S8 did sway the model, which was refused only because it quoted the text instead of citing event IDs. A tidier fooled answer would be stored, so the analyst's review is doing real work. What the design guarantees is that an answer can't start an action or change a case, not that it's right. See [what that run showed](evaluation.md#testing-without-an-aws-account).
 
 ### AI evaluation and observability
 

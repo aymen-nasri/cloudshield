@@ -76,10 +76,13 @@ class Settings:
     probe_target_selector: str | None = None
     # Which policy environment this deployment is ("lab" or "prod"); the allowlist is per environment.
     environment: str = "lab"
-    # "offline" = deterministic baseline (no LLM); "bedrock" = Amazon Bedrock. Unset: investigations off.
+    # "offline" = deterministic baseline (no LLM); "ollama" = a model on your own machine;
+    # "bedrock" = Amazon Bedrock. Unset: investigations off.
     investigator: str | None = None
     bedrock_model_id: str | None = None
     bedrock_guardrail_id: str | None = None
+    ollama_model: str | None = None
+    ollama_url: str = "http://127.0.0.1:11434"
     runbooks_dir: Path | None = field(default_factory=lambda: _default_runbooks())
     # Lab demos only: lets the console open signed in as this analyst token (see console/router.py).
     console_demo_token: str | None = None
@@ -120,6 +123,8 @@ class Settings:
             investigator=os.getenv("CLOUDSHIELD_INVESTIGATOR"),
             bedrock_model_id=os.getenv("CLOUDSHIELD_BEDROCK_MODEL_ID"),
             bedrock_guardrail_id=os.getenv("CLOUDSHIELD_BEDROCK_GUARDRAIL_ID"),
+            ollama_model=os.getenv("CLOUDSHIELD_OLLAMA_MODEL"),
+            ollama_url=os.getenv("CLOUDSHIELD_OLLAMA_URL", "http://127.0.0.1:11434"),
             console_demo_token=os.getenv("CLOUDSHIELD_CONSOLE_DEMO_TOKEN"),
             credentials=credentials,
         )
@@ -173,6 +178,12 @@ def build_stores(settings: Settings) -> Stores:
 def build_model(settings: Settings) -> LanguageModel | None:
     if settings.investigator == "offline":
         return OfflineBaselineModel()
+    if settings.investigator == "ollama":
+        if not settings.ollama_model:
+            raise ValueError("CLOUDSHIELD_INVESTIGATOR=ollama needs CLOUDSHIELD_OLLAMA_MODEL")
+        from investigator.ollama import OllamaClient
+
+        return OllamaClient(settings.ollama_model, url=settings.ollama_url)
     if settings.investigator == "bedrock":
         if not settings.bedrock_model_id:
             raise ValueError("CLOUDSHIELD_INVESTIGATOR=bedrock needs CLOUDSHIELD_BEDROCK_MODEL_ID")
