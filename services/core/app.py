@@ -7,14 +7,17 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Response
+from fastapi.responses import PlainTextResponse
+from prometheus_client import CONTENT_TYPE_LATEST
 
 from cases.audit import AuditLog, AuditStore
 from cases.router import build_router as build_cases_router
 from cases.store import CaseStore, InMemoryCaseStore
 from common.models import NormalizedEvent
 from console.router import build_router as build_console_router
-from core.auth import AnalystDirectory
+from core.auth import AnalystDirectory, require_analyst
+from core.metrics import Metrics
 from correlation.engine import CorrelationEngine
 from enrichment.context import PodContext
 from enrichment.enricher import Enricher, kubernetes_pod_resolver
@@ -210,6 +213,9 @@ def create_app(
     settings = settings or Settings.from_env()
     stores = stores or build_stores(settings)
 
+    coverage = CoverageTracker(settings.max_silence)
+    metrics = Metrics(coverage)
+
     if executor is None and settings.executor == "k8s":
         from responder.quarantine import KubernetesPodApi
 
@@ -223,6 +229,7 @@ def create_app(
         load_policies(),
         executor,
         environment=settings.environment,
+        on_finished=metrics.observe_response,
     )
     investigations = InvestigationService(
         stores.investigations,
@@ -242,6 +249,7 @@ def create_app(
     enrich = Enricher(pod_resolver, stores.entities) if pod_resolver else None
 
     def on_accepted(event: NormalizedEvent) -> None:
+        metrics.observe_event(event)
         case, link = engine.correlate(event)
         stores.audit.append(
             "service",
@@ -262,7 +270,6 @@ def create_app(
         # GuardDuty arrives through the SQS worker; the HTTP route exists for replaying fixtures.
         "guardduty": GuardDutyAdapter(),
     }
-    coverage = CoverageTracker(settings.max_silence)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -271,7 +278,7 @@ def create_app(
 
     app = FastAPI(title="CloudShield", version="0.3.0", lifespan=lifespan)
     app.include_router(
-        build_ingestion_router(pipeline, adapters, settings.credentials, coverage, settings.analysts)
+        build_ingestion_router(pipeline, adapters, settings.credentials, coverage, settings.analysts, metrics)
     )
     app.include_router(build_cases_router(stores.cases, stores.audit, stores.entities, settings.analysts))
     app.include_router(build_response_router(response, settings.analysts))
@@ -287,6 +294,16 @@ def create_app(
             settings.analysts,
         )
     )
+
+    @app.get(
+        "/metrics",
+        response_class=PlainTextResponse,
+        # Sensor silence is useful to an attacker too, so this needs a login like every other route.
+        # Prometheus sends a token with its `authorization` scrape setting.
+        dependencies=[Depends(require_analyst(settings.analysts))],
+    )
+    def prometheus_metrics() -> Response:
+        return Response(metrics.render(), media_type=CONTENT_TYPE_LATEST)
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
