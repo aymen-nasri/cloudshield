@@ -11,7 +11,7 @@ module "eks" {
   cluster_endpoint_public_access           = true
   enable_cluster_creator_admin_permissions = true
 
-  # Control-plane audit logs feed the K8s audit evidence source (pods/exec, RBAC changes).
+  # Control-plane audit logs (pods/exec, RBAC changes). Nothing in CloudShield reads them yet.
   cluster_enabled_log_types = ["audit", "authenticator"]
 
   cluster_addons = {

@@ -21,4 +21,4 @@ override an existing allow, so "apply a deny-all policy to the bad pod" does not
 ## Consequences
 - Works on any CNI that enforces standard NetworkPolicy (VPC CNI with network policy, Calico).
 - `hostNetwork` pods are out of reach and must be escalated instead.
-- Already-open connections may survive depending on the CNI; an egress probe is planned (M4).
+- Already-open connections may survive depending on the CNI; the traffic probe tests new connections from a peer, not ones already open.
