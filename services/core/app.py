@@ -320,6 +320,9 @@ def create_app(
         metrics.observe_event(event)
 
     pipeline = IngestPipeline(stores.events, evidence, on_accepted=on_accepted, enrich=enrich)
+    # An event stored by a run that failed before linking it, whose producer never sent it again.
+    for event in stores.events.unlinked(stores.cases):
+        on_accepted(event)
     adapters: dict[str, SourceAdapter] = {
         "falco": FalcoAdapter(cluster=settings.cluster, account_id=settings.account_id),
         "wazuh": WazuhAdapter(account_id=settings.account_id),

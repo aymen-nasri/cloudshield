@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
+from cases.store import CaseStore
 from common.ids import new_id
 from common.models import NormalizedEvent
 from common.timeutil import utcnow
@@ -27,6 +28,10 @@ class EventStore(Protocol):
     def insert(self, event: NormalizedEvent, dedup_key: str) -> None: ...
 
     def get(self, event_id: str) -> NormalizedEvent | None: ...
+
+    def unlinked(self, cases: CaseStore) -> list[NormalizedEvent]:
+        """Events stored but in no case, oldest first: a failure fell between the two writes."""
+        ...
 
 
 class InMemoryEventStore:
@@ -50,6 +55,10 @@ class InMemoryEventStore:
 
     def all(self) -> list[NormalizedEvent]:
         return list(self._by_id.values())
+
+    def unlinked(self, cases: CaseStore) -> list[NormalizedEvent]:
+        found = [e for e in self._by_id.values() if cases.case_for_event(e.event_id) is None]
+        return sorted(found, key=lambda e: e.event_time)
 
 
 @dataclass(frozen=True)
