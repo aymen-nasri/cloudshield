@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cloudshield"
-version = "0.7.0"
+version = "0.8.0"
 description = "AI-assisted cloud-native security operations with human-controlled incident response"
 readme = "README.md"
 license = "MIT"
