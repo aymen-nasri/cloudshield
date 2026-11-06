@@ -1,5 +1,5 @@
 -- CloudShield case store. PostgreSQL 16.
--- Mirrors the data model in the README. Applied by the M2 PostgreSQL store.
+-- Applied at startup with the later migrations in this folder.
 -- IDs are prefixed, time-sortable strings (evt_..., case_..., prp_...), see services/common/ids.py.
 
 CREATE TABLE incident (
@@ -142,5 +142,5 @@ CREATE TABLE audit_log (
     hash       text        NOT NULL UNIQUE
 );
 
--- The audit log is append-only: the application role may INSERT and SELECT, never UPDATE or DELETE.
+-- Meant to stop UPDATE and DELETE, but this doesn't bind the table's owner, which is who the app connects as.
 REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM PUBLIC;

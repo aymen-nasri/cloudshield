@@ -21,7 +21,7 @@ Status markers: ✅ built and tested · 🧩 written as code, not deployed · �
 | **Amazon SQS** | Durable buffering between AWS and CloudShield | Redrive to a dead-letter queue; no silent loss | ✅ consumer · 🧩 queues · 🔬 on Moto |
 | **AWS Lambda** | Short, explicitly scoped response handlers | Invoked only after authorization and approval | ✅ handler · 🧩 deployment · 🔬 called through a stand-in Invoke API |
 | **AWS Step Functions** | Durable response orchestration | Tracks steps, approval waits, timeouts and retries | 🧩 definition · 🔬 run on Step Functions Local |
-| **Amazon S3** | Evidence and report storage | SSE-KMS, versioning, Object Lock, lifecycle, checksums | ✅ store · 🧩 bucket · 🔬 on Moto |
+| **Amazon S3** | Raw evidence storage | SSE-KMS, versioning, Object Lock, lifecycle, checksums | ✅ store · 🧩 bucket · 🔬 on Moto |
 | **Amazon Bedrock** | Managed LLM inference | Investigation summaries only; no AWS mutation rights | 🧩 client, not yet run · 🔬 request format only |
 | **Ollama** | A language model on your own machine, for free | Runs the investigation checks in CI with no AWS account | ✅ client and CI job, with a small model |
 | **Amazon ECR** | Container image registry | Only signed, scanned images are deployed | 🧩 |
@@ -75,7 +75,7 @@ Every integration in CloudShield defines what crosses it **and** the protection 
 | VPC Flow Logs / Hubble → correlation | Observed endpoints and flow metadata | Never infer full reachability from partial logs |
 | Adapters → OCSF mapping | Normalized fields, source links, stable IDs | Versioned mappings; originals never discarded |
 | Correlation → PostgreSQL / OpenSearch | Cases, event relationships, timeline, search index | Lineage and access boundaries preserved |
-| Evidence + runbooks → RAG → LLM | Curated evidence and reference passages | Redaction, scoped retrieval, mandatory citations |
+| Evidence + runbooks → RAG → LLM | Curated evidence and reference passages | Redaction, scoped retrieval, every fact must cite an event |
 | LLM → analyst console | Summary, hypotheses, questions, non-executable proposal | Schema validation; uncertainty shown explicitly |
 | Analyst + policy → response engine | Approved, target-scoped request | Strong auth, independent allowlist, approval trace |
 | Response engine → AWS / Kubernetes | One permitted action plus a verification query | Scoped IAM/RBAC, timeout, idempotency |

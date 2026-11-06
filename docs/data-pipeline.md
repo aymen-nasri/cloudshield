@@ -287,7 +287,7 @@ erDiagram
     }
 ```
 
-The audit log is **append-only and hash-chained**: each record stores the hash of the previous one, so any tampering breaks the chain and shows up during verification.
+The audit log is **hash-chained**: each record stores the hash of the previous one, so editing or removing a record breaks the chain and shows up during verification. The code only ever appends, but the database doesn't force that: the app connects as the table's owner, which a `REVOKE` doesn't bind. So the chain makes tampering visible rather than impossible, and it can't catch removing the newest records.
 
 ```json
 {

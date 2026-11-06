@@ -411,7 +411,7 @@ cloudshield/
 │   ├── kind/             # lab cluster, traffic probe, PostgreSQL, Prometheus and Grafana, deploy scripts
 │   ├── k8s/              # demo "shop" application
 │   ├── helm/             # CloudShield chart, Falco values
-│   ├── ansible/          # Linux host hardening, Wazuh agent, signed Wazuh integration
+│   ├── ansible/          # Linux host hardening, Wazuh agent, the Wazuh integration script
 │   └── policies/         # Kyverno, NetworkPolicy baseline, RBAC
 ├── evals/                # AI grounding and safety evaluation harness
 ├── scripts/              # demo, kind lab run, emulated AWS, local model check, console demo, fixture replay, schema export
