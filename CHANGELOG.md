@@ -4,6 +4,8 @@ All notable changes to CloudShield. The format follows [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Fixed
+- **An event nobody resent stayed out of any case.** If a failure fell between storing an event and linking it, and the producer never tried again, nothing would ever link it. The next startup now finds those events and links them.
 ### Added
 - **Signed approvals: a compromised API pod can no longer start an action.** Approvers sign with a private key only they hold, using `scripts/sign_approval.py`, and the responder checks the signatures itself against public keys only it holds. A signature only works for that exact proposal, requester and approver, and expires after 15 minutes. The number needed comes from the pod's live labels. See [ADR 0005](docs/adr/0005-signed-approvals.md). This replaces the biggest limit stated in earlier releases.
 - **Only the API pod can reach the responder.** A NetworkPolicy now enforces this, and the kind lab checks it from a pod in another namespace.
