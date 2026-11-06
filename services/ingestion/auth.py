@@ -1,7 +1,7 @@
 """Producer authentication. Every source is rejected unless it is explicitly configured (fail closed).
 
 Two schemes:
-- bearer token: Falcosidekick sends a static header (customHeaders) over mTLS in the cluster.
+- bearer token: Falcosidekick sends a static header (customHeaders), over plain HTTP in the cluster.
 - HMAC-SHA256 over the body: producers that can sign, such as the Wazuh integration script.
 """
 

@@ -27,7 +27,7 @@
     },
     "AwaitApproval": {
       "Type": "Task",
-      "Comment": "Pauses until the console calls SendTaskSuccess with {bound_hash} or SendTaskFailure(ApprovalRejected).",
+      "Comment": "Pauses until something calls SendTaskSuccess with {bound_hash} or SendTaskFailure(ApprovalRejected).",
       "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
       "Parameters": {
         "FunctionName": "${ApprovalNotifierFunctionArn}",

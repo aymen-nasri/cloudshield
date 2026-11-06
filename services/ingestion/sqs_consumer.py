@@ -1,4 +1,4 @@
-"""Worker that drains GuardDuty/Security Hub findings from SQS (EventBridge -> SQS -> here).
+"""Worker that drains GuardDuty findings from SQS (EventBridge -> SQS -> here).
 
 Messages are deleted only after successful ingestion. Failures are left on the queue so SQS
 redelivers them; after maxReceiveCount the redrive policy moves them to the dead-letter queue.

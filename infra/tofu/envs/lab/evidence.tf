@@ -1,4 +1,4 @@
-# Raw evidence and reports: SSE-KMS, versioned, Object Lock, no public access.
+# Raw evidence: SSE-KMS, versioned, Object Lock, no public access.
 
 resource "aws_kms_key" "evidence" {
   description         = "CloudShield lab evidence encryption"

@@ -1,5 +1,5 @@
 # CloudShield response allowlist. Anything not listed here is denied.
-# Changes to this file go through code review like any other code (CODEOWNERS: security).
+# Changes to this file go through a pull request and CI like any other code.
 version: 1
 actions:
   k8s.pod.quarantine_label:
