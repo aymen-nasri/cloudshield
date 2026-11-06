@@ -1,4 +1,4 @@
-# Two identities with no overlap:
+# Three identities with no overlap:
 #   cloudshield-investigator: read-only, cluster-wide metadata for enrichment.
 #   cloudshield-responder:    may patch pod labels in protected namespaces, nothing else.
 #   cloudshield-prober:       may exec into the one probe pod, to test traffic after a quarantine.
