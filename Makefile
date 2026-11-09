@@ -75,7 +75,7 @@ core-down:
 	docker compose down
 
 demo:
-	$(PYTHON) scripts/demo.py --svg docs/demo.svg
+	$(PYTHON) scripts/demo.py --svg docs/images/demo.svg
 
 console-demo:
 	$(PYTHON) scripts/console_demo.py
