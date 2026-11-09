@@ -2,6 +2,15 @@
 
 All notable changes to CloudShield. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+- **The README is now a short overview.** It leads with an architecture diagram and says what CloudShield does, its highlights, its tech stack and its status in one screen. Every section it used to hold was moved, not removed, into focused pages under `docs/`: [architecture](docs/architecture.md), [build status and evidence](docs/status.md), [scenarios](docs/scenarios.md), [roadmap](docs/roadmap.md), [getting started](docs/getting-started.md), [skills](docs/skills.md) and [how this was built](docs/how-it-was-built.md), with a new [documentation index](docs/README.md).
+- Images now live in `docs/images/`; `make demo` writes `docs/images/demo.svg`.
+
+### Added
+- An architecture diagram of every component and connection, and five workflow diagrams (scenario S1, the AWS lab, AI investigation, response safety, DevSecOps) in `docs/images/`.
+
 ## [0.8.0] - 2026-11-06
 
 A compromised API pod can no longer start an action, which was the biggest limit stated in earlier releases. Nothing here has run on real AWS, EKS or Bedrock.

@@ -123,7 +123,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -e ".[dev]"
-      - name: The README's local setup, from .env.example to a restart
+      - name: The getting-started local setup, from .env.example to a restart
         run: bash scripts/compose_check.sh
       - name: Logs (on failure)
         if: failure()

@@ -10,7 +10,7 @@ Back to the [project README](../README.md).
 | [`lab_e2e.py`](lab_e2e.py) | Scenario S1 against the kind lab. With `--alert falco` (what CI runs) it attacks a live pod and waits for Falco's real alert; by default it replays the S1 alert. Then it quarantines the pod as the responder identity, prove with real traffic that it is cut off and that rollback restores it, check RBAC refusals | **real** (kind) | none | the `kind lab` job |
 | [`console_demo.py`](console_demo.py) | Serves the analyst console on demo data at http://127.0.0.1:8090/console | simulated | simulated | `tests/test_console.py` |
 | [`replay_fixture.py`](replay_fixture.py) | Sends a scenario's alerts from `detections/fixtures/` to a running API | n/a | n/a | — |
-| [`compose_check.sh`](compose_check.sh) | The README's `docker compose` setup, from `.env.example` through login to a restart that must keep the case | n/a | n/a | the `docker compose` job |
+| [`compose_check.sh`](compose_check.sh) | The `docker compose` setup in [Getting started](../docs/getting-started.md), from `.env.example` through login to a restart that must keep the case | n/a | n/a | the `docker compose` job |
 | [`emulated_aws.sh`](emulated_aws.sh) | The lab's OpenTofu files applied to Moto, the real state machine on Step Functions Local, and the AWS paths tested on both | n/a | emulated | yes |
 | [`local_model_check.py`](local_model_check.py) | S1 and S8 investigated by a real model on Ollama. Fails only if a guarantee breaks, or if no answer ever reached the checks | n/a | none | yes |
 | [`sign_approval.py`](sign_approval.py) | Signs an approval on the approver's own machine, showing what's being approved and recomputing its hash | n/a | none | unit tests, and the kind lab signs the same way |

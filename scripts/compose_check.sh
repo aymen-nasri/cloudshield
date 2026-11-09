@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The README's local setup, run for real: .env from .env.example, make core-up's stack, the replay,
+# The local setup from docs/getting-started.md, run for real: .env from .env.example, make core-up's stack, the replay,
 # the analyst login, and a restart that must not lose the case. CI runs this on every pull request.
 set -euo pipefail
 cd "$(dirname "$0")/.."
