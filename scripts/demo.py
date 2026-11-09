@@ -1,7 +1,7 @@
 """End-to-end demo of scenario S1 through the real HTTP API, in one process.
 
     python scripts/demo.py                 # print the walkthrough
-    python scripts/demo.py --svg docs/demo.svg
+    python scripts/demo.py --svg docs/images/demo.svg
 
 Everything runs through CloudShield's actual code: ingestion, OCSF normalization, enrichment,
 correlation, the policy gate, approvals, execution, verification and the audit log. Only the
