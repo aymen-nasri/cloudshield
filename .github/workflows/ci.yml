@@ -192,7 +192,7 @@ jobs:
       KYVERNO_VERSION: v1.19.2
     steps:
       - uses: actions/checkout@v7
-      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+      - uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
         with:
           install_only: true
       - name: Create the lab cluster (Calico, because kindnet does not enforce NetworkPolicy)
@@ -361,7 +361,7 @@ jobs:
       KYVERNO_VERSION: v1.19.2 # matches the lab job
     steps:
       - uses: actions/checkout@v7
-      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+      - uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
         with:
           install_only: true
       - name: Create a cluster and enforce image verification
