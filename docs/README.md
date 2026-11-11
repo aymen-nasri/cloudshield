@@ -14,7 +14,7 @@ Status markers used on every page: ✅ built and tested · 🧩 written as code,
 | [Roadmap](roadmap.md) | Milestones M1–M5, the MVP definition and planned features |
 | [Getting started](getting-started.md) | Install, test, run the API, the kind lab and the AWS lab |
 | [Skills this project demonstrates](skills.md) | What is built per domain: AWS, Linux, Kubernetes, networking, detection, data, AI, software, DevOps, DevSecOps |
-| [How this was built](how-it-was-built.md) | Design, implementation with an AI pair programmer, process and status reporting |
+| [How this was built](how-it-was-built.md) | Design, implementation, process and status reporting |
 
 ## Workflow diagrams
 
