@@ -123,7 +123,7 @@ docs/         design, workflows, ADRs, diagrams
 
 ## How this was built
 
-Designed by the author and implemented with an AI pair programmer (Claude Code); every change went through a pull request and CI, and nothing merges on a red build. More in [How this was built](docs/how-it-was-built.md).
+Every change went through a pull request and CI, and nothing merges on a red build. More in [How this was built](docs/how-it-was-built.md).
 
 ## Author and license
 
