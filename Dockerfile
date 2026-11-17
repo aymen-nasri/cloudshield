@@ -1,11 +1,11 @@
 # CloudShield core API image.
-FROM python:3.12-slim AS build
+FROM python:3.15-slim AS build
 WORKDIR /src
 COPY pyproject.toml README.md ./
 COPY services ./services
 RUN pip install --no-cache-dir --prefix=/install ".[postgres,aws,k8s]"
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 LABEL org.opencontainers.image.source=https://github.com/aymen-nasri/cloudshield \
       org.opencontainers.image.description="CloudShield core API" \
       org.opencontainers.image.licenses=MIT
